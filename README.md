@@ -57,3 +57,123 @@ The `Hollow` SDK is meant to provide the required artifacts to build headless Ca
 [^2]: of course, one could inspect the script on-chain and tell the difference between a real validator and a mock one, but no difference whatsoever from the UX perspective.
 [^3]: everything that lives outside of the blockchain is usually referred to as "off-chain". It's a little bit egocentric if you ask me, but serves its purpose. In our experience, there's usually much more off-chain code than on-chain.
 [^4]: this concept is very similar to "hexagonal architecture" or "clean architecture". If this idea of strict separation of concerns resonates with you, I encourage you to take a look at those patterns too.
+
+## What does it look like?
+
+The introduction sounds good and very fancy but you're not convinced until you see some code, right?
+
+The following code shows what the off-chain code looks like for basic NFT marketplace that uses the `Hollow` SDK.
+
+The idea is simple: the marketplace address can lock NFT and release them only if the correct price for the NFT is paid. To accomplish that, our off-chain component is going to do the following:
+
+- for each time our marketplace address receives an UTxO representing an buyable asset, we store a reference in database table.
+- for each time our marketplace address releases an UTxO representing a buyable asset, we remove it from our database table.
+- if someone wants to query the list available assets, we lookup available items in the db and provide them as a json values.
+- if someone want to buy one of the available assets, we create a partial transaction and return it for the user to balance & sign.
+
+Here's the code:
+
+::warning:: this is WIP, specific function names and structures will most likely suffer some changes. The essence of the framework and the semantic meaning of the artifacts will remain.
+
+```rust
+
+const MARKETPLACE: &str = "addr1xxx";
+
+#[derive(Datum)]
+struct AssetDatum {
+    price: PlutusInt,
+}
+
+#[chain_event]
+#[match_inbound_utxo(to_address=MARKETPLACE)]
+fn on_new_asset(utxo: UTxO) -> Result<()> {
+    let db = use_extension::<Database>();
+
+    let datum = utxo.datum_as::<AssetDatum>();
+
+    if datum.is_none() {
+        bail!("unexpected utxo");
+    }
+
+    for asset in utxo.assets() {
+        db.execute(
+            "INSERT INTO (policy, asset, price) VALUES ({}, {}, {})",
+            asset.policy_id,
+            asset.asset_name,
+            datum.price,
+        );
+    }
+
+    Ok(())
+}
+
+#[chain_event]
+#[match_outbound_utxo(from_address=MARKETPLACE)]
+fn on_asset_sold(utxo: UTxO) -> Result<()> {
+    let db = use_extension::<Database>();
+
+    for asset in utxo.assets() {
+        db.execute(
+            "DELETE FROM assets WHERE policy={} and asset={}",
+            asset.policy_id,
+            asset.asset_name,
+        );
+    }
+
+    Ok(())
+}
+
+#[extrinsic_event]
+#[match_http_route(path = "/assets", method = "GET")]
+fn query_assets() -> Result<JsonValue> {
+    let db = use_extension::<Database>();
+
+    let assets = db.query_all("SELECT * from assets;").to_json();
+
+    Ok(assets)
+}
+
+#[derive(Serialize, Deserialize)]
+struct Order {
+    policy_id: String,
+    asset_name: String,
+    buyer: Address,
+}
+
+#[extrinsic_event]
+#[match_http_route(path = "/orders", method = "POST")]
+fn create_order(params: Order) -> Result<PartialTx> {
+    let db = use_extension::<Database>();
+
+    let asset = db.query_first(
+        "SELECT * from assets WHERE policy={}, name={};",
+        params.policy_id,
+        params.asset_name,
+    );
+
+    if asset.is_none() {
+        bail!("we don't have that asset");
+    }
+
+    let market = party_from_address(MARKETPLACE);
+    let buyer = party_from_address(params.buyer);
+
+    let tx = TxBuilder::new()
+        .transfer_asset(
+            market, // from party
+            buyer,  // to party
+            params.policy_id,
+            params.asset_name,
+            TransferQuantity::All,
+        )
+        .output_ada(
+            market,      // to party
+            asset.price, // lovelace amount
+        )
+        .build();
+
+    Ok(tx)
+}
+```
+
+
