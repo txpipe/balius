@@ -62,6 +62,54 @@ The `Hollow` SDK is meant to provide the required artifacts to build headless Ca
 
 The introduction sounds good and very fancy but you're not convinced until you see some code, right?
 
+The following snippet shows how to create an HTTP endpoint from using the framework:
+
+```rust
+#[on_http_get(path = "/hello")]
+fn say_hello() -> Result<JsonValue> {
+    let output = json!({ "message": "hello world!" });
+    Ok(output)
+}
+```
+
+The following snippet shows how react to an UTxO being locked in a script address relevant for your dApp:
+
+```rust
+
+#[derive(Datum)]
+struct MyDatum {
+    foo: PlutusInt,
+    bar: PlutusInt,
+}
+
+#[on_inbound_utxo(to=SCRIPT_ADDRESS)]
+fn on_asset_sold(utxo: UTxO) -> Result<()> {
+    // do something interesting with the new UTxO
+
+    let datum = utxo.datum_as::<MyDatum>();
+    println!(datum.foo);
+
+    Ok(())
+}
+```
+
+The following snippet shows how react to an UTxO being unlocked in a script address relevant for your dApp:
+
+```rust
+#[on_outbound_utxo(from=SCRIPT_ADDRESS)]
+fn on_asset_sold(utxo: UTxO) -> Result<()> {
+    // do something interesting with the UTxO data
+
+    println!(utxo.address);
+    println!(utxo.coin);
+
+    Ok(())
+}
+```
+
+
+## Putting it all together
+
 The following code shows what the off-chain code looks like for basic NFT marketplace that uses the `Hollow` SDK.
 
 The idea is simple: the marketplace address can lock NFT and release them only if the correct price for the NFT is paid. To accomplish that, our off-chain component is going to do the following:
