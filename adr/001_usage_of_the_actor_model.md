@@ -13,7 +13,7 @@ The Actor Model offers a structured approach to dealing with concurrency and dis
 
 ## Decision
 
-Hollow will be a "loose" implementation of the "actor model". The instances of the headless dApps will be considered actors. Actors will interact with the external world through well-defined queues of inbound and outbound events.
+Hollow will be a "loose" implementation of the _Actor Model_. The instances of the headless dApps will be considered actors. Actors will interact with the external world through well-defined queues of inbound and outbound events.
 
 Some differences to be noted:
 - actors won't be allowed to create other actors (at least initially).
