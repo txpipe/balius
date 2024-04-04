@@ -2,6 +2,17 @@
 
 ## HTTP calls
 
+- `extrinsic`
+
+This attribute creates associates a function to an endpoint of the name of the function associated to attribute. 
+
+This examples creates an endpoint at the `<root>/resolve` path of the server and will validate the body of the request to match the type of the `ResolveOrderBody` struct.
+```rust
+#[extrinsic]
+fn resolve(request: Request<ResolveOrderBody>) {}
+```
+ 
+
 - `on_http(method=<METHOD>, path=<PATH>)`
 
 This attribute is associates a function to an HTTP request specified by METHOD and PATH. The body of the request if there is one can be specified by the type of the parameter associated to the body.

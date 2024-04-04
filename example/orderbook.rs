@@ -1,20 +1,29 @@
-// TODO: add some data validation (research warp)
+use rocket::serde::{json::Json, Deserialize, Serialize};
+use rocket_validation::{Validate, Validated};
+
 const ORDER_MINTING_POLICY: &string = "";
 const CONTROL_TOKEN_NAME: &string = "";
 const ORDER_BOOK: &string = "";
 const VALIDATOR_REF_UTXO: &string = "";
 
+#[derive(Debug, Deserialize, Serialize, Validate)]
+#[serde(crate = "rocket::serde")]
 struct AssetClass {
     name: String,
+    #[validate(length = 56)]
     policy_id: String,
 }
 
+#[derive(Debug, Deserialize, Serialize, Validate)]
+#[serde(crate = "rocket::serde")]
 struct OrderStartBody {
     sender_address: String,
     sent: (AssetClass, u64),
     receive: (AssetClass, u64),
 }
 
+#[derive(Debug, Deserialize, Serialize, Validate)]
+#[serde(crate = "rocket::serde")]
 struct AddressDetails {
     address_type: AddressType,
     network: Network,
@@ -26,14 +35,24 @@ struct AddressDetails {
 
 struct ResolveOrderBody {
     receiver_address: String,
+    tx_out_ref: String,
 }
 
 struct CancelOrderBody {
     sender_address: String,
+    tx_out_ref: String,
 }
 
-#[on_http(method = "POST", path = "/order")]
-fn new(order_data: OrderStartBody) {
+pub struct Request<Body> {
+    method: http::Method,
+    uri: String,
+    headers: http::header::HeaderMap,
+    body: Body,
+}
+
+#[extrinsic]
+fn new(request: Request<OrderStartBody>) {
+    let order_data = request.body;
     // returns transaction to be signed by sender
     let datum = OrderDatum {
         // make ti so that the order needs to receive orderData.receive
@@ -52,19 +71,19 @@ fn new(order_data: OrderStartBody) {
     tx.serialize()
 }
 
-#[on_http(method = "GET", path = "/order")]
-// TODO: think how to cleanly validate query input
-fn list(cursor: String, limit: u64) {
+#[extrinsic]
+fn list(request: Request<None>) {
+    let (cursor, limit) = parse_params(request);
     let db = use_extension::<Database>();
     let orders = db.execute("SELECT * FROM orders LIMIT {} WHERE hash<{}", limit, cursor);
     orders
 }
 
-#[on_http(method="POST", path=("/order"/ String))]
-// TODO: think of a clean way to indicate the dynamic path
-fn resolve(tx_out_ref: String, resolve_data: ResolveOrderBody) {
+#[extrinsic]
+fn resolve(request: Request<ResolveOrderBody>) {
+    let resolve_data = request.body;
     let payment_cred_hash = Address::payment_credential(resolve_data.receiver_address);
-    let utxos = UTxO::by_ref([tx_out_ref]);
+    let utxos = UTxO::by_ref([resolve_data.tx_out_ref]);
     let datum = utxos[0].datum_as::<OrderDatum>();
     let sender_address = datum.sender_address;
     let order_redeemer = Redeemer {};
@@ -86,14 +105,14 @@ fn resolve(tx_out_ref: String, resolve_data: ResolveOrderBody) {
     tx.serialize()
 }
 
-#[on_http(method="POST", path=("/order"/ String))]
-// TODO: think of a clean way to indicate the dynamic path
-fn cancel(tx_out_ref: String, cancel_data: CancelOrderBody) {
+#[extrinsic]
+fn cancel(request: Request<CancelOrderBody>) {
+    let cancel_data = request.body;
     // returns a transaction to be signed by the creator of the order
     let payment_cred_hash = Address::payment_credential(cancel_data.sender_address);
     // utxos at address ORDER_BOOK
     let utxos = UTxO::at(ORDER_BOOK);
-    let tx_out_hash = tx_out_ref.split("#").next().unwrap();
+    let tx_out_hash = cancel_data.tx_out_ref.split("#").next().unwrap();
     let target_utxo = utxos
         .iter()
         .find(|utxo| utxo.tx_hash == tx_out_hash)

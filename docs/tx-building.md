@@ -60,4 +60,5 @@
 
 ## Important issues
 - what errors does `tx.serialize()` throw?
-- how to set the status of an http response?
+- how to set the status of an http response? Response struct?
+- how to catch a url of '/foo/<bar>'?
