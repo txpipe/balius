@@ -21,14 +21,13 @@ fn buyer_bot(tx: Tx) {
 	if (is_valid_order_value(order_value)) {
 	    let order_datum = output.datum_as::<OrderDatum>();
 	    if (order_datum.receive_assetclass == TOKEN_TO_SELL && is_valid_price(order_value, order_datum.amount)) {
-		orders.add(output_index);
+		orders.add(OutputRef::new(tx.hash(), order_index));
 	    }
 	}
     }
     if (!orders.is_empty()) {
 	// At the moment we only consume the first order.
-        let order_index = orders.into_iter().nth(0);
-	let order_to_resolve = OutputRef::new(tx.hash(), order_index);
+	let order_to_resolve = orders.into_iter().nth(0);
         let unbalancedTx = build_tx_resolve(order_to_resolve, , wallet::address());
 
         // "crane::wallet" maybe?
