@@ -1,29 +1,25 @@
-use rocket::serde::{json::Json, Deserialize, Serialize};
-use rocket_validation::{Validate, Validated};
+use serde::{Deserialize, Serialize};
 
-const ORDER_MINTING_POLICY: &string = "";
-const CONTROL_TOKEN_NAME: &string = "";
-const ORDER_BOOK: &string = "";
-const VALIDATOR_REF_UTXO: &string = "";
+const ORDER_MINTING_POLICY: &str = "";
+const CONTROL_TOKEN_NAME: &str = "";
+const ORDER_BOOK: &str = "";
+const ORDER_BOOK_NAMESPACE: &str = "";
+const VALIDATOR_REF_UTXO: &str = "";
 
-#[derive(Debug, Deserialize, Serialize, Validate)]
-#[serde(crate = "rocket::serde")]
+#[derive(Serialize, Deserialize, Debug)]
 struct AssetClass {
     name: String,
-    #[validate(length = 56)]
     policy_id: String,
 }
 
-#[derive(Debug, Deserialize, Serialize, Validate)]
-#[serde(crate = "rocket::serde")]
+#[derive(Serialize, Deserialize, Debug)]
 struct CreateOrderPayload {
     sender_address: String,
     sent: (AssetClass, u64),
     receive: (AssetClass, u64),
 }
 
-#[derive(Debug, Deserialize, Serialize, Validate)]
-#[serde(crate = "rocket::serde")]
+#[derive(Serialize, Deserialize, Debug)]
 struct AddressDetails {
     address_type: AddressType,
     network: Network,
@@ -33,8 +29,7 @@ struct AddressDetails {
     stake_credential: Option<Credential>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Validate)]
-#[serde(crate = "rocket::serde")]
+#[derive(Serialize, Deserialize, Debug)]
 struct Pagination {
     cursor: Option<String>,
     limit: u64,
@@ -52,11 +47,17 @@ struct CancelOrderPayload {
     tx_out_ref: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Encode, Decode, Serialize, Deserialize, Debug)]
 struct OrderDatum {
     sender_address: AddressType,
     receive_amount: u64,
     receive_assetclass: AssetClass
+}
+
+#[derive(Encode, Decode, Serialize, Deserialize, Debug)]
+enum OrderRedeemer {
+	Cancel,
+	Resolve
 }
 
 #[on_request(topic = "create")]
@@ -108,7 +109,6 @@ fn build_tx_resolve(utxo_ref: OutputRef, payment_address: Address) -> Unbalanced
     let datum = utxo.datum_as::<OrderDatum>();
     let (receive_asset, receive_qty) = order_data.receive;
     let sender_address = datum.sender_address;
-    let order_redeemer = Redeemer {};
     let control_token_unit = format!("{}{}", ORDER_MINTING_POLICY, CONTROL_TOKEN_NAME);
 
     let tx = StagingTransaction::new()
@@ -117,7 +117,7 @@ fn build_tx_resolve(utxo_ref: OutputRef, payment_address: Address) -> Unbalanced
 		tx_hash: tx_hash,
 		txo_index: index,
 	    },
-	    order_redeemer.cbor(),
+	    Resolve.cbor(),
 	    None
 	)
 	.disclosed_signer(payment_address)
@@ -142,7 +142,6 @@ fn cancel(cancel_data: CancelOrderPayload) -> Result<UnbalancedTx> {
 
     let (tx_hash, index)= utxo_ref;
     let utxo = UTxO::by_ref(utxo_ref);
-    let order_redeemer = Redeemer {};
 
     let tx = StagingTransaction::new()
 	.add_spend_redeemer(
@@ -150,7 +149,7 @@ fn cancel(cancel_data: CancelOrderPayload) -> Result<UnbalancedTx> {
 		tx_hash: tx_hash,
 		txo_index: index,
 	    },
-	    order_redeemer.cbor(),
+	    Cancel.cbor(),
 	    None
 	)
 	.disclosed_signer(payment_address)
@@ -172,10 +171,10 @@ enum OrderChange {
 }
 
 #[on_chain(address=ORDER_BOOK)]
-fn on_order_book_change(tx: Transaction) {
+fn on_order_book_change(tx: Tx) {
     let inputs = tx.inputs;
     let outputs = tx.outputs;
-    let change = match_tx_purpose(transaction);
+    let change = match_tx_purpose(tx);
 
     match change {
         OrderChange::New(order) => on_new_order(order),
