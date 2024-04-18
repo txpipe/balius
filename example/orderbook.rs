@@ -16,7 +16,7 @@ struct AssetClass {
 
 #[derive(Debug, Deserialize, Serialize, Validate)]
 #[serde(crate = "rocket::serde")]
-struct OrderStartBody {
+struct CreateOrderPayload {
     sender_address: String,
     sent: (AssetClass, u64),
     receive: (AssetClass, u64),
@@ -33,104 +33,135 @@ struct AddressDetails {
     stake_credential: Option<Credential>,
 }
 
-struct ResolveOrderBody {
+#[derive(Debug, Deserialize, Serialize, Validate)]
+#[serde(crate = "rocket::serde")]
+struct Pagination {
+    cursor: Option<String>,
+    limit: u64,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct ResolveOrderPayload {
     receiver_address: String,
     tx_out_ref: String,
 }
 
-struct CancelOrderBody {
+#[derive(Serialize, Deserialize, Debug)]
+struct CancelOrderPayload {
     sender_address: String,
     tx_out_ref: String,
 }
 
-pub struct Request<Body> {
-    method: http::Method,
-    uri: String,
-    headers: http::header::HeaderMap,
-    body: Body,
+#[derive(Serialize, Deserialize, Debug)]
+struct OrderDatum {
+    sender_address: AddressType,
+    receive_amount: u64,
+    receive_assetclass: AssetClass
 }
 
-#[extrinsic]
-fn new(request: Request<OrderStartBody>) {
-    let order_data = request.body;
-    // returns transaction to be signed by sender
-    let datum = OrderDatum {
-        // make ti so that the order needs to receive orderData.receive
-    };
-    let control_token_unit = format!("{}{}", ORDER_MINTING_POLICY, CONTROL_TOKEN_NAME);
+#[on_request(topic = "create")]
+fn create(order_data: CreateOrderPayload) -> Result<UnbalancedTx> {
+    let (sent_asset, sent_qty) = order_data.sent;
+    let (receive_asset, receive_qty) = order_data.receive;
 
-    let tx = Tx::new()
-        .to_contract(
-            order_data.sender_address, // from
-            order_data.ORDER_BOOK,     // to
-            order_data.sent,           // assets
-            InlineDatum(datum),        // datum
-        )
-        .mint([(control_token_unit, 1)]) // assets
-        .read_from([VALIDATOR_REF_UTXO]);
-    tx.serialize()
+    if (sent_qty > 0 && receive_qty > 0) {
+        let datum = OrderDatum {
+            sender_address: order_data.sender_address,
+            receive_amount: receive_qty,
+            receive_assetclass: receive_asset,
+        };
+
+        let tx = StagingTransaction::new()
+            .output(
+                Output::new(ORDER_BOOK, MIN_ADA)
+                    .add_asset(sent_asset.policy_id, sent_asset.name, sent_qty)
+                    .add_asset(ORDER_MINTING_POLICY, CONTROL_TOKEN_NAME, 1)
+                    .set_inline_datum(datum.cbor()),
+            )
+            .mint_asset(ORDER_MINTING_POLICY, CONTROL_TOKEN_NAME, 1)
+            .reference_input(MINTING_REF_UTXO);
+
+        Ok(UnbalancedTx {
+            unbalancedTx: tx.cbor_hex(),
+        });
+    } else {
+        Err(InvalidPayloadWrongTokenQuantity);
+    }
 }
 
-#[extrinsic]
-fn list(request: Request<None>) {
-    let (cursor, limit) = parse_params(request);
-    let db = use_extension::<Database>();
-    let orders = db.execute("SELECT * FROM orders LIMIT {} WHERE hash<{}", limit, cursor);
-    orders
+#[on_request(topic = "list")]
+fn list(pagination: Pagination) -> Result<[Order]> {
+    let kv_storage = use_extension::<Storage>(ORDER_BOOK_NAMESPACE);
+    let order_refs = kv_storage.keys(Some(pagination.cursor), pagination.limit);
+    orders.filter_map(|utxo_ref| kv_storage.get::<Order>(utxo_ref))
 }
 
-#[extrinsic]
-fn resolve(request: Request<ResolveOrderBody>) {
-    let resolve_data = request.body;
+#[on_request(topic = "resolve")]
+fn resolve(resolve_data: ResolveOrderPayload) {
     let payment_cred_hash = Address::payment_credential(resolve_data.receiver_address);
-    let utxos = UTxO::by_ref([resolve_data.tx_out_ref]);
-    let datum = utxos[0].datum_as::<OrderDatum>();
+    build_tx_resolve(resolve_data.tx_out_ref, resolve_data.tx_out_ref)
+}
+
+fn build_tx_resolve(utxo_ref: OutputRef, payment_address: Address) -> UnbalancedTx {
+    let (tx_hash, index)= utxo_ref;
+    let utxo = UTxO::by_ref(utxo_ref);
+    let datum = utxo.datum_as::<OrderDatum>();
+    let (receive_asset, receive_qty) = order_data.receive;
     let sender_address = datum.sender_address;
     let order_redeemer = Redeemer {};
     let control_token_unit = format!("{}{}", ORDER_MINTING_POLICY, CONTROL_TOKEN_NAME);
-    let tx = Tx::new()
-        .collect_from(utxos, order_redeemer)
-        .read_from([VALIDATOR_REF_UTXO])
-        .add_signer_key(payment_cred_hash)
-        .mint([(control_token_unit, 1)])
-        .pay_to_address(
-            sender_address,                                 // address
-            [(datum.receiver_unit, datum.receiver_amount)], // assets
-        )
+
+    let tx = StagingTransaction::new()
+	.add_spend_redeemer(
+	    Input {
+		tx_hash: tx_hash,
+		txo_index: index,
+	    },
+	    order_redeemer.cbor(),
+	    None
+	)
+	.disclosed_signer(payment_address)
+	.reference_input(VALIDATOR_REF_UTXO);
+        .mint_asset(ORDER_MINTING_POLICY, CONTROL_TOKEN_NAME, -1)
+	.output(
+	    Output::new(sender_address, MIN_ADA)
+		.add_asset(receive_asset.policy_id, receive_asset.name, datum.receiver_amount)
+	)
         .add_metadata(
-            674,                          // label
-            String::from("ResolveOrder"), // data
+            674,
+            String::from("ResolveOrder"),
         );
 
-    tx.serialize()
+    UnbalancedTx { unbalancedTx: tx.cbor_hex() }
 }
 
-#[extrinsic]
-fn cancel(request: Request<CancelOrderBody>) {
-    let cancel_data = request.body;
-    // returns a transaction to be signed by the creator of the order
+#[on_request(topic = "cancel")]
+fn cancel(cancel_data: CancelOrderPayload) -> Result<UnbalancedTx> {
     let payment_cred_hash = Address::payment_credential(cancel_data.sender_address);
-    // utxos at address ORDER_BOOK
-    let utxos = UTxO::at(ORDER_BOOK);
-    let tx_out_hash = cancel_data.tx_out_ref.split("#").next().unwrap();
-    let target_utxo = utxos
-        .iter()
-        .find(|utxo| utxo.tx_hash == tx_out_hash)
-        .unwrap();
-    let datum = target_utxo.datum_as::<OrderDatum>();
+    let utxo_ref = cancel_data.tx_out_ref;
+
+    let (tx_hash, index)= utxo_ref;
+    let utxo = UTxO::by_ref(utxo_ref);
     let order_redeemer = Redeemer {};
-    let control_token_unit = format!("{}{}", ORDER_MINTING_POLICY, CONTROL_TOKEN_NAME);
-    let tx = Tx::new()
-        .collect_from([target_utxo], order_redeemer)
-        .read_from([VALIDATOR_REF_UTXO])
-        .add_signer_key(payment_cred_hash)
-        .mint([(control_token_unit, -1)])
+
+    let tx = StagingTransaction::new()
+	.add_spend_redeemer(
+	    Input {
+		tx_hash: tx_hash,
+		txo_index: index,
+	    },
+	    order_redeemer.cbor(),
+	    None
+	)
+	.disclosed_signer(payment_address)
+	.reference_input(VALIDATOR_REF_UTXO);
+        .mint_asset(ORDER_MINTING_POLICY, CONTROL_TOKEN_NAME, -1)
         .add_metadata(
-            774,                         // label
-            String::from("CancelOrder"), // data
+            674,
+            String::from("CancelOrder"),
         );
 
-    tx.serialize()
+    UnbalancedTx { unbalancedTx: tx.cbor_hex() }
 }
 
 enum OrderChange {
@@ -140,7 +171,7 @@ enum OrderChange {
     Other,
 }
 
-#[match_tx_variant(type="address_eq", value=ORDER_BOOK, details=true)]
+#[on_chain(address=ORDER_BOOK)]
 fn on_order_book_change(tx: Transaction) {
     let inputs = tx.inputs;
     let outputs = tx.outputs;
@@ -155,31 +186,19 @@ fn on_order_book_change(tx: Transaction) {
 }
 
 fn on_new_order(order: Order) {
-    let (sent_unit, sent_amount) = order.send;
-    let (receive_unit, receive_amount) = order.receive;
-    let db = use_extension::<Database>();
-    let utxo_ref = db.execute(
-        "INSERT INTO orders (utxo_ref, s_address, s_unit, s_amount, r_unit, r_amount) VALUES, ({}, {}, {}, {}, {}) RETURNING utxo_ref",
-        order.utxo_ref,
-        order.sender_address,
-        sent_unit,
-        sent_amount,
-        receive_unit,
-        receive_amount
-        );
+    // create order in storage
+    let kv_storage = use_extension::<Storage>(ORDER_BOOK_NAMESPACE);
+    kv_storage.set(order.utxo_ref, order);
 }
 
 fn on_order_cancellation(order: Order) {
-    // update db
-    let db = use_extension::<Database>();
-    db.execute("DELETE FROM orders WHERE utxo_ref={}", order.utxo_ref);
+    // remove order from storage
+    let kv_storage = use_extension::<Storage>(ORDER_BOOK_NAMESPACE);
+    kv_storage.remove(order.utxo_ref);
 }
 
 fn on_order_resolution(order: Order) {
-    // update db
-    let db = use_extension::<Database>();
-    db.execute(
-        "UPDATE orders SET r_address={} resolved=TRUE",
-        order.receiver_address,
-    );
+    // update order in storage
+    let kv_storage = use_extension::<Storage>(ORDER_BOOK_NAMESPACE);
+    kv_storage.set(order.utxo_ref, order);
 }
