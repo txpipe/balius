@@ -61,7 +61,7 @@ Response: Serialized orders
 ```
 
 ## Implementation with Hollow
-In this section, we will review the key aspects of Hollow by implementing the previous specification. Because many aspects of the implementation are repetitive, and the goal is to be concise, we will only show some parts of the final code, but the complete implementation can be found [here](...).
+In this section, we will review the key aspects of Hollow by implementing the previous specification. Because many aspects of the implementation are repetitive, and the goal is to be concise, we will only show some parts of the final code, but the complete implementation can be found [here](../example/orderbook.rs).
 
 This dApp will need to address two types of events: Those triggered by a user action and those by the blockchain. [Hollow supports four types of events](https://github.com/txpipe/hollow/blob/main/adr/003_available_event_types.md). The relevant ones for this example will be the [`Request`](https://github.com/txpipe/hollow/blob/main/adr/003_available_event_types.md#request-event) event and the [`Chain`](https://github.com/txpipe/hollow/blob/main/adr/003_available_event_types.md#chain-event) event.
 Before entering into the details of these two events, we can quickly mention that the remaining events are [`PubSub`](https://github.com/txpipe/hollow/blob/main/adr/003_available_event_types.md#pubsub-event) and [`Timer`](https://github.com/txpipe/hollow/blob/main/adr/003_available_event_types.md#timer-event) events. The `PubSub` event can be thought of as similar to the `Request` event but without expecting any response, and the `Timer` event, as its name suggests, helps us to setup a recurring action to be performed by some function.
@@ -80,7 +80,7 @@ struct UnbalancedTx { unbalancedTx: string }
 
 To fulfill the specification, we need to implement the request events `create`, `list`, `resolve`, and `cancel`. Except for the listing event that will return a list of orders, the remaining three will return an unbalanced transaction ready to be balanced, signed, and submitted if successful.
 
-It’s very important to note the serialization of each payload type: [`CreateOrderPayload`](...), [`Pagination`](...), [`ResolveOrderPayload`](...), and [`CancelOrderPayload`](...). Coincide with the specification.
+It’s very important to note the serialization of each payload type: [`CreateOrderPayload`](../example/orderbook.rs#L19), [`Pagination`](../example/orderbook.rs#L38), [`ResolveOrderPayload`](../example/orderbook.rs#L44), and [`CancelOrderPayload`](../example/orderbook.rs#L50). Coincide with the specification.
 
 - `Create`, it’s subscribed to the topic create in the runtime, and it receives a payload of type CreateOrderPayload, as we already mentioned, it needs to be serializable. The resulting transaction creates an order.
 ```rust
@@ -115,14 +115,14 @@ Up to this point, we could try our events in the Hollow runtime by simply comple
 
 It’s interesting to differentiate the event subscription from the dApp's business logic. Thus, the [Transaction Building](#transaction-building) section will address the proper completion of these functions.
 
-### Functions triggered by events in the blockchain. 
+### Functions triggered by events in the blockchain. (WIP)
 These functions are subscribed to specific events in the blockchain. When an event occurs, the associated function(s) gets the data from it (this could be a transaction, UTxO, etc).
 
 on_order_book_change This function will be triggered when a UTxO is produced to (or consumed from) the address ORDER_BOOK_ADDRESS. By specifying the type Transaction, Hollow fills the parameter tx with the fully resolved Cardano transaction that triggered the event. The function will be in charge of syncing the database with the on-chain order book.
 ```rust
 #[on_chain(address = ORDER_BOOK)]
 fn on_order_book_change(tx: Transaction)
-{ … }
+{ todo!() }
 ```
 
 ### Transaction building
@@ -133,7 +133,7 @@ Building a transaction includes many parts (or phases), which we can roughly ide
 
 The quick description of these phases doesn’t intend to be thorough but will help us fix some terminology for what follows. Hollow provides support for all these phases, particularly for the transaction building through the [pallas](https://github.com/txpipe/pallas/tree/main/pallas-txbuilder) library.
 
-We will focus on the [`create`](...) function, which is associated with the corresponding `on_request` topic. The remaining functions can be found in the complete example. This function is in charge of building a transaction that must create a UTxO that will represent the order, locking the number of tokens the user is offering plus a minted (by the transaction) control token, and including correct datum information.
+We will focus on the [`create`](../example/orderbook.rs#L63) function, which is associated with the corresponding `on_request` topic. The remaining functions can be found in the complete example. This function is in charge of building a transaction that must create a UTxO that will represent the order, locking the number of tokens the user is offering plus a minted (by the transaction) control token, and including correct datum information.
 
 The diagram of the unbalanced transaction we want to build is:
 <p align="center">
