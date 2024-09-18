@@ -1,34 +1,34 @@
 export default {
-  logo: <h1 className="font-bold text-4xl md:text-4xl lg:text-5xl">Hollow</h1>,
+  logo: <h1 className="font-bold text-4xl md:text-4xl lg:text-5xl">Balius</h1>,
   project: {
-    link: "https://github.com/txpipe/hollow",
+    link: "https://github.com/txpipe/balius",
   },
   chat: {
     link: "https://discord.gg/Vc3x8N9nz2",
   },
   footer: {
-    text: "Hollow - TxPipe",
+    text: "Balius by TxPipe",
   },
   nextThemes: {
     defaultTheme: "dark",
   },
-  docsRepositoryBase: "https://github.com/txpipe/hollow/tree/main/docs",
+  docsRepositoryBase: "https://github.com/txpipe/balius/tree/main/docs",
   useNextSeoProps() {
     return {
-      titleTemplate: "%s – Hollow",
-      description: "Hollow is an SDK for building Headless Cardano dApps",
-      canonical: "https://hollow.txpipe.io",
-      siteName: "Hollow",
+      titleTemplate: "%s – Balius",
+      description: "Balius is an SDK for building Headless dApps for UTxO-based blockchains",
+      canonical: "https://balius.txpipe.io",
+      siteName: "Balius",
       openGraph: {
-        url: "https://hollow.txpipe.io",
-        title: "Hollow",
-        description: "Hollow is an SDK for building Headless Cardano dApps",
+        url: "https://balius.txpipe.io",
+        title: "Balius",
+        description: "Balius is an SDK for building Headless dApps for UTxO-based blockchains",
         images: [
           {
-            url: "https://hollow.txpipe.io/logo.png",
+            url: "https://balius.txpipe.io/logo.png",
             width: 209,
             height: 209,
-            alt: "Hollow",
+            alt: "Balius",
             type: "image/png",
           },
         ],

@@ -8,7 +8,16 @@
     }
   },
   "introduction": "Introduction",
-  "nomenclature": "Nomenclature",
-  "events": "Events",
-  "order-book-example": "Order book example"
+  "quickstart": "Quickstart",
+  "-- Reference --": {
+    "type": "separator",
+    "title": "Reference"
+  },
+  "events": "Event Types",
+  "-- Examples --": {
+    "type": "separator",
+    "title": "Examples"
+  },
+  "order-book": "Order Book",
+  "marketplace": "Marketplace"
 }

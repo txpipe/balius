@@ -1,0 +1,39 @@
+# Quickstart
+
+## Prerequisites
+
+Before getting started with Hollow, make sure you have the following prerequisites installed:
+
+1. **Rust**: Hollow is built with Rust, so you'll need to have Rust installed on your system. You can install Rust by following the official instructions at [https://www.rust-lang.org/tools/install](https://www.rust-lang.org/tools/install).
+
+2. **Cargo**: Cargo is Rust's package manager and build tool. It comes pre-installed with Rust, so if you have Rust installed, you should already have Cargo.
+
+## Create a new Rust project
+
+```bash
+cargo new my_dapp
+```
+
+## Add Balius as a dependency
+
+To add Hollow as a dependency to your project, open your `Cargo.toml` file and add the following line under the `[dependencies]` section:
+
+```toml
+balius = "0.1.0"
+```
+
+Then, run `cargo build` to download and compile the dependencies.
+
+## Add a hello world script
+
+```rust
+fn say_hello(name: String) -> Result<String> {
+    Ok(format!("Hello, {}!", name))
+}
+
+#[balius::main]
+fn main(config: Config) -> balius::Worker {
+    balius::Worker::new()
+        .handle_request("say-hello", say_hello)
+}
+```
