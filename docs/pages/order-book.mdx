@@ -1,6 +1,6 @@
 # Order Book Example
 
-If you are anxious and don't want the guide. You can click here to see the [code](https://github.com/txpipe/hollow/blob/main/example/orderbook.rs)
+If you are anxious and don't want the guide. You can click here to see the [code](https://github.com/txpipe/balius/blob/main/examples/order-book/orderbook.rs)
 
 ## What is an order book?
 An order book is a list of token trades. Let’s see an example.
@@ -13,7 +13,7 @@ The script is the same for every order available. Anyone can see all the orders 
 
 ## Endpoints Specification
 
-We will assume that the users will interact with this application through HTTP. For this, each operation will be implemented in its own endpoint. We use HTTP to simplify the specification, but Hollow supports multiple connections through its generic connector interface.
+We will assume that the users will interact with this application through HTTP. For this, each operation will be implemented in its own endpoint. We use HTTP to simplify the specification, but Balius supports multiple connections through its generic connector interface.
 
 We will have the following operations:
 - Create an order
@@ -62,14 +62,14 @@ Body: {
 Response: Serialized orders
 ```
 
-## Implementation with Hollow
-In this section, we will review the key aspects of Hollow by implementing the previous specification. Because many aspects of the implementation are repetitive, and the goal is to be concise, we will only show some parts of the final code, but the complete implementation can be found [here](https://github.com/txpipe/oura/blob/main/example).
+## Implementation with Balius
+In this section, we will review the key aspects of Balius by implementing the previous specification. Because many aspects of the implementation are repetitive, and the goal is to be concise, we will only show some parts of the final code, but the complete implementation can be found [here](https://github.com/txpipe/oura/blob/main/example).
 
-This dApp will need to address two types of events: Those triggered by a user action and those by the blockchain. [Hollow supports four types of events](/events). The relevant ones for this example will be the [`Request`](/events#request-event) event and the [`Chain`](/events#chain-event) event.
+This dApp will need to address two types of events: Those triggered by a user action and those by the blockchain. [Balius supports four types of events](/events). The relevant ones for this example will be the [`Request`](/events#request-event) event and the [`Chain`](/events#chain-event) event.
 Before entering into the details of these two events, we can quickly mention that the remaining events are [`PubSub`](/events#pubsub-event) and [`Timer`](/events#timer-event) events. The `PubSub` event can be thought of as similar to the `Request` event but without expecting any response, and the `Timer` event, as its name suggests, helps us to setup a recurring action to be performed by some function.
 
 ### Functions triggered by users
-Before starting this section, a quick disclaimer is that when we mention “users”, we clearly refer to any piece of software able to perform HTTP requests; it could be a frontend, middleware, etc. Also, the interaction is achieved through the Hollow Runtime, which publishes messages on different topics. When a message is published on a topic, the Hollow Runtime executes the corresponding function according to the specified topic.
+Before starting this section, a quick disclaimer is that when we mention “users”, we clearly refer to any piece of software able to perform HTTP requests; it could be a frontend, middleware, etc. Also, the interaction is achieved through the Balius Runtime, which publishes messages on different topics. When a message is published on a topic, the Balius Runtime executes the corresponding function according to the specified topic.
 
 Implementing a new request event is done by associating an `on_request` attribute together with a `topic`, with a function. The function’s signature will have some reasonable restrictions: It must have only one argument, which will be the request's payload, and the resulting type must be encapsulated inside the `Result` type. Besides that, every involved type must be serializable.
 
@@ -113,7 +113,7 @@ fn cancel(request: CancelOrderPayload) -> Result<UnbalancedTx> {
 }
 ```
 
-Up to this point, we could try our events in the Hollow runtime by simply completing each function with “dummy” values: It could be an empty string for transactions and an empty list for the listing. By doing this, we could test that everything is starting to fit together.
+Up to this point, we could try our events in the Balius runtime by simply completing each function with “dummy” values: It could be an empty string for transactions and an empty list for the listing. By doing this, we could test that everything is starting to fit together.
 
 It’s interesting to differentiate the event subscription from the dApp's business logic. Thus, the [Transaction Building](#transaction-building) section will address the proper completion of these functions.
 
@@ -126,11 +126,11 @@ fn on_order_book_change(tx: Tx) {
     todo!()
 }
 ```
-In this example, `on_order_book_change()` will be triggered when a UTxO is produced to (or consumed from) the address `ORDER_BOOK_ADDRESS`. By specifying the type `Transaction`, when the event occurs, Hollow calls the function with the parameter `tx` holding the projection of the [fully resolved Cardano transaction](https://github.com/txpipe/oura/blob/0e419322dba45f81f20a71f160eabbd2bfe12c3f/assets/denopkgs/v2AlphaOuraUtils/ouraTypes.ts#L76) that produces (or consumes) the UTxO(s) to (from) the address of the order book.
+In this example, `on_order_book_change()` will be triggered when a UTxO is produced to (or consumed from) the address `ORDER_BOOK_ADDRESS`. By specifying the type `Transaction`, when the event occurs, Balius calls the function with the parameter `tx` holding the projection of the [fully resolved Cardano transaction](https://github.com/txpipe/oura/blob/0e419322dba45f81f20a71f160eabbd2bfe12c3f/assets/denopkgs/v2AlphaOuraUtils/ouraTypes.ts#L76) that produces (or consumes) the UTxO(s) to (from) the address of the order book.
 
 By acting on this event, the function will be able to "sync" the runtime's managed storage with the on-chain order book state. We will see how to do that in the [Database Management](#database-management) section.
 
-In the [Buyer Bot with Hollow](#buyer-bot-with-hollow) section. We will define a bot that acts on new orders.
+In the [Buyer Bot with Balius](#buyer-bot-with-balius) section. We will define a bot that acts on new orders.
 ```rust
 #[on_chain(mints=ORDER_MINTING_POLICY)]
 fn buyer_bot(tx: Tx) {
@@ -145,7 +145,7 @@ Building a transaction includes many parts (or phases), which we can roughly ide
 - Balance the transaction. As we previously mentioned, in this phase, we need to include all the inputs required to pay fees and all the tokens paid to the transaction's outputs that weren’t already in the inputs.
 - Sign and submit. Lastly, we need to include all the required signatures and submit the transaction to the Blockchain.
 
-The quick description of these phases doesn’t intend to be thorough but will help us fix some terminology for what follows. Hollow provides support for all these phases, particularly for the transaction building through the [pallas](https://github.com/txpipe/pallas/tree/main/pallas-txbuilder) library.
+The quick description of these phases doesn’t intend to be thorough but will help us fix some terminology for what follows. Balius provides support for all these phases, particularly for the transaction building through the [pallas](https://github.com/txpipe/pallas/tree/main/pallas-txbuilder) library.
 
 We will focus on the `create` function, which is associated with the corresponding `on_request` topic. The remaining functions can be found in the complete example. This function is in charge of building a transaction that must create a UTxO that will represent the order, locking the number of tokens the user is offering plus a minted (by the transaction) control token, and including correct datum information.
 
@@ -189,7 +189,7 @@ fn create(order_data: CreateOrderPayload) -> Result<UnbalancedTx> {
 The `create` function it has two possible outcomes, it’s successful and it builds an unbalanced transaction. Or fails because of some incorrect payload information. Let’s focus on the transaction building, we start by creating an “empty” transaction `StagingTransaction::new()`. Then, following the diagram we must include a new output and mint the control token. Besides that, we include as reference input with a reference script of the minting policy.
 
 ### Database management
-Hollow provides a way to interact with an instance of key-value storage (with namespaces).
+Balius provides a way to interact with an instance of key-value storage (with namespaces).
 ```rust
 fn on_new_order(order: Order) {
     // create order in storage
@@ -221,13 +221,13 @@ With `use_extension::<Storage>("example1")` we get access to the key-value stora
 - `kv_storage.get<T>(k)` Deserializes into the (deserializable) type `T` the value saved under the key `k` in the namespace of the `kv_storage`.
 - `kv_storage.keys(maybe_cursor, limit)` Returns at most the amount `limit` of keys in the storage added after the key `maybe_key` (`maybe_key` is of type `Option<String>`). If the `maybe_key` is `None`, then the keys are returned from the beginning.
 
-### Buyer Bot with Hollow
+### Buyer Bot with Balius
 
-Up to this point, we saw that we can use `Request` events to build transactions and `Chain` events to keep the book order database updated. We will present another powerful usage of a `Chain` event that is possible thanks to Hollow, which, as we already mentioned, supports balance, signing, and submission of a transaction.
+Up to this point, we saw that we can use `Request` events to build transactions and `Chain` events to keep the book order database updated. We will present another powerful usage of a `Chain` event that is possible thanks to Balius, which, as we already mentioned, supports balance, signing, and submission of a transaction.
 
-Let's suppose we are really interested in exchanging a couple of particular tokens. Of course, setting up a minimum price that we are willing to pay. What we will implement is a kind of bot that will react to order creation and resolve the orders we are interested in buying. Quickly remembering the design, every time we create an order we mint a "Control Token" with a fixed minting policy. Thus, we can use the on-chain event that reacts to the minting of tokens with `ORDER_MINTING_POLICY` policy. Then, we need to just keep the orders we are interested in (it could be more than one per transaction) and resolve the orders using the same business logic that the [`build_tx_resolve`](https://github.com/txpipe/hollow/blob/main/example/orderbook.rs#L105) function to build an unbalanced transaction. Once we have an unbalanced transaction, we will use the `wallet` previously configured to balance and sign the transaction that finally will be submitted.
+Let's suppose we are really interested in exchanging a couple of particular tokens. Of course, setting up a minimum price that we are willing to pay. What we will implement is a kind of bot that will react to order creation and resolve the orders we are interested in buying. Quickly remembering the design, every time we create an order we mint a "Control Token" with a fixed minting policy. Thus, we can use the on-chain event that reacts to the minting of tokens with `ORDER_MINTING_POLICY` policy. Then, we need to just keep the orders we are interested in (it could be more than one per transaction) and resolve the orders using the same business logic that the [`build_tx_resolve`](https://github.com/txpipe/balius/blob/main/examples/orderbook/orderbook.rs#L105) function to build an unbalanced transaction. Once we have an unbalanced transaction, we will use the `wallet` previously configured to balance and sign the transaction that finally will be submitted.
 
-In the following implementation, we will resolve only one order per event just for simplicity, but it's a nice challenge to improve the implementation to support many orders. The complete example can be found [here](https://github.com/txpipe/hollow/blob/main/example/buyer.rs).
+In the following implementation, we will resolve only one order per event just for simplicity, but it's a nice challenge to improve the implementation to support many orders. The complete example can be found [here](https://github.com/txpipe/balius/blob/main/examples/orderbook/buyer.rs).
 
 ```rust
 #[on_chain(mints=ORDER_MINTING_POLICY)]

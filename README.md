@@ -1,7 +1,7 @@
 
-# Hollow
+# Balius (ex Hollow)
 
-Hollow is an SDK for building Headless Cardano dApps.
+Balius is an SDK for building Headless Cardano dApps.
 
 ## About dApps
 
@@ -39,6 +39,7 @@ This flexibility is a double-edged sword. For sure, is nice for developers to ch
 - re-invent the wheel: each project ends up building their own middleware for interacting with the blockchain (reading on-chain data, submitting transactions, etc).
 
 The end result is "snowflake" apps, each one is unique.
+
 ## Headless Apps
 
 "Headless dApp" refers to the idea of decoupling the business logic from the external context by forcing all inputs and outputs through a well-defined interface. To run your app, you'll need a generic runtime that knows how to connect your business logic to the outside world[^4].
@@ -50,7 +51,7 @@ This strict separation of concerns provides several benefits:
 - multiple frontends: your app can have multiple frontends, maybe even developed by different teams. For example, a DEX could have different web frontends, the user could pick their favorite.
 - less plumbing: the runtime component can be quite generic and reused by many dApps. There's no need to re-implement how to query on-chain data, how to build transactions, how to submit transaction, etc. You can focus just on your business logic knowing that plumbing is already taken care of.
 
-The `Hollow` SDK is meant to provide the required artifacts to build headless Cardano dApps in a developer friendly way. It provides all of the plumbing out-of-the-box, you just need to relax and enjoy the ride.
+Balius is meant to provide the required artifacts to build headless Cardano dApps in a developer friendly way. It provides all of the plumbing out-of-the-box, you just need to relax and enjoy the ride.
 
 
 [^1]: Keeping the on-chain code as small as possible it's very desirable trait. On-chain code is executed one time by each node of the blockchain. This is required as part of the consensus, but very redundant from the computational perspective.
@@ -110,7 +111,7 @@ fn on_asset_sold(utxo: UTxO) -> Result<()> {
 
 ## Putting it all together
 
-The following code shows what the off-chain code looks like for basic NFT marketplace that uses the `Hollow` SDK.
+The following code shows what the off-chain code looks like for basic NFT marketplace that uses Balius SDK.
 
 The idea is simple: the marketplace address can lock NFT and release them only if the correct price for the NFT is paid. To accomplish that, our off-chain component is going to do the following:
 
