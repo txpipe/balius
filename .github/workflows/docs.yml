@@ -25,4 +25,4 @@ jobs:
           context: ./docs
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/txpipe/hollow-docs:${{ github.sha }}
+          tags: ghcr.io/txpipe/balius-docs:${{ github.sha }}
