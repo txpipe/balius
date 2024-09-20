@@ -1,0 +1,10 @@
+
+[workspace]
+resolver = "2"
+members = [
+    "balius",
+    "examples/basic",
+    "examples/catalyst-demo",
+    "examples/sundae-stop-loss-strategy",
+    "examples/ticket-vending-machine",
+]

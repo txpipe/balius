@@ -1,0 +1,111 @@
+{
+  "preamble": {
+    "title": "txipe/ticket-vending-machine",
+    "description": "Aiken contracts for project 'txipe/ticket-vending-machine'",
+    "version": "0.0.0",
+    "plutusVersion": "v2",
+    "compiler": {
+      "name": "Aiken",
+      "version": "v1.0.24-alpha+982eff4"
+    },
+    "license": "Apache-2.0"
+  },
+  "validators": [
+    {
+      "title": "event_setup.mint",
+      "redeemer": {
+        "title": "redeemer",
+        "schema": {
+          "$ref": "#/definitions/event_setup~1SetupEvent"
+        }
+      },
+      "compiledCode": "5854010000323232323232223253330044a229309b2b19299980219b87480000044c8c8c8c94ccc02cc03400852616375a601600260160046eb8c024004c018dd50018b18021baa0025734aae7555cf2ab9f5742ae89",
+      "hash": "75b0f5537cd8eca81f95199549233a765883b597b3e5b99c47675e07"
+    },
+    {
+      "title": "ticket_purchase.redeem",
+      "datum": {
+        "title": "datum",
+        "schema": {
+          "$ref": "#/definitions/ticket_purchase~1EventState"
+        }
+      },
+      "redeemer": {
+        "title": "redeemer",
+        "schema": {
+          "$ref": "#/definitions/ticket_purchase~1PurchaseTicket"
+        }
+      },
+      "compiledCode": "588f0100003232323232323232222323253330084a229309b2b19299980419b87480000044c8c8c8c94ccc03cc04400852616375a601e002601e0046eb8c034004c01801058c01800cc94ccc01ccdc3a4000002264646464a66601c60200042930b1bad300e001300e002375c6018002600a0082c600a0064600a6ea80048c00cdd5000ab9a5573aaae7955cfaba157441",
+      "hash": "f6a6a21d95d870cbb0906cd42e152257bef7d092d257f21127432b70"
+    }
+  ],
+  "definitions": {
+    "ByteArray": {
+      "dataType": "bytes"
+    },
+    "Int": {
+      "dataType": "integer"
+    },
+    "event_setup/SetupEvent": {
+      "title": "SetupEvent",
+      "anyOf": [
+        {
+          "title": "SetupEvent",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "event",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "total",
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        }
+      ]
+    },
+    "ticket_purchase/EventState": {
+      "title": "EventState",
+      "anyOf": [
+        {
+          "title": "EventState",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "event",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "available",
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        }
+      ]
+    },
+    "ticket_purchase/PurchaseTicket": {
+      "title": "PurchaseTicket",
+      "anyOf": [
+        {
+          "title": "PurchaseTicket",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "event",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "quantity",
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
