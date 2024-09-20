@@ -1,0 +1,19 @@
+<html>
+<script>
+
+var tx = "{{cbor}}";
+
+async function sign() {
+    console.log(tx); 
+    let api = await window.cardano.eternl.enable();
+    console.log(api);
+    api.signTx(tx);
+}
+
+</script>
+
+<button onclick="sign()">
+Sign
+</button>
+
+</html>
