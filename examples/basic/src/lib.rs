@@ -19,11 +19,7 @@
 //     Ok(state)
 // }
 
-use balius::handler_wrapper;
-use balius::{
-    bindings::balius::odk::driver::{Event, HandleError, Response},
-    Json,
-};
+use balius::{bindings::balius::odk::driver::Event, Env, Json, Result};
 
 use serde::{Deserialize, Serialize};
 
@@ -37,13 +33,13 @@ struct Reply {
     message: String,
 }
 
-fn say_hello(param: Json<Param>) -> Result<Json<Reply>, HandleError> {
+fn say_hello(_: Env<()>, param: Json<Param>) -> Result<Json<Reply>> {
     Ok(Json(Reply {
         message: format!("Hello, {}!", param.0.my_name),
     }))
 }
 
-fn read_state(evt: Event) -> Result<Json<State>, HandleError> {
+fn read_state(_: Env<()>, _: Event) -> Result<Json<State>> {
     Ok(Json(State {
         lovelace_balance: 3,
     }))
@@ -60,7 +56,7 @@ struct Config {
 }
 
 //#[balius::main]
-fn main(config: Config) -> balius::Worker {
+fn main() -> balius::Worker {
     balius::Worker::new()
         //.watch_utxo(with_address(config.address), track_utxo)
         //.watch_utxo_spent(with_address(config.address), clear_utxo)
