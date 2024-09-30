@@ -9,6 +9,36 @@ interface kv {
     list-values: func(prefix: string) -> result<list<string>, kv-error>;
 }
 
+interface ledger {
+    type ledger-error = u32;
+    type cbor = list<u8>;
+    
+    record txo-ref {
+        tx-hash: list<u8>,
+        tx-index: u32,
+    }
+    
+    record utxo {
+        body: cbor,
+        ref: txo-ref,
+    }
+
+    type address = list<u8>;
+
+    record token-pattern {
+        policy: list<u8>,
+        name: option<list<u8>>,
+    }
+
+    record utxo-pattern {
+        address: option<address>,
+        token: option<token-pattern>,
+    }
+
+    read-utxos: func(refs: list<txo-ref>) -> result<list<utxo>, ledger-error>;
+    search-utxos: func(pattern: utxo-pattern) -> result<list<utxo>, ledger-error>;
+}
+
 interface submit {
     type cbor = list<u8>;
     type submit-error = u32;
@@ -78,6 +108,7 @@ world worker {
     import kv;
     import broadcast;
     import submit;
+    import ledger;
     
     use driver.{event, handle-error, response};
 
