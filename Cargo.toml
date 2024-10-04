@@ -4,7 +4,10 @@ resolver = "2"
 members = [
     "balius",
     "examples/basic",
-    "examples/sundae-stop-loss-strategy",
-    "examples/ticket-vending-machine",
+    # "examples/sundae-stop-loss-strategy",
+    # "examples/ticket-vending-machine",
     "examples/minter/offchain",
+    "balius-sdk",
+    "balius-runtime",
+    "balius-macros",
 ]

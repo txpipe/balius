@@ -1,77 +1,87 @@
-use balius::*;
 
-use pallas_primitives::conway::{Constr, PlutusData};
-use pallas_txbuilder::{Address, AssetName, BuildBabbage, ExUnits, ReferenceScript};
+use balius_sdk::{txbuilder::{
+    Address, AssetName, FeeChangeReturn, MinUtxoLovelace, MintBuilder, OutputBuilder, ReferenceScript, TxBuilder, UtxoSource
+}, NewTx, WorkerResult};
+use balius_sdk::{FnHandler, Worker, Config, Params};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 
+
 #[derive(Serialize, Deserialize, Clone)]
-struct Config {
-    free_validator: ReferenceScript,
+struct FaucetConfig {
+    validator: ReferenceScript,
 }
 
 #[serde_as]
 #[derive(Serialize, Deserialize)]
-struct FreeMintRequest {
+struct ClaimRequest {
     token: AssetName,
     quantity: u64,
     #[serde_as(as = "DisplayFromStr")]
     recipient: Address,
-    //fuel: UtxoSource,
+    fuel: UtxoSource,
 }
 
-fn free_mint(config: Env<Config>, params: Json<FreeMintRequest>) -> Result<UnsignedTx> {
-    let tx = pallas_txbuilder::StagingTransaction::new()
-        .reference_input(config.free_validator.clone())
-        .mint_asset(
-            config.free_validator.clone(),
-            params.token.clone(),
-            params.quantity as i64,
+balius_sdk::define_asset_class!(FaucetAsset, b"abcabcababcabcababcabcababca");
+
+fn claim(config: Config<FaucetConfig>, params: Params<ClaimRequest>) -> WorkerResult<NewTx> {
+    let new_asset = FaucetAsset::value(params.token.clone(), params.quantity);
+
+    let tx = TxBuilder::new()
+        .with_reference_input(config.validator.clone())
+        .with_input(params.fuel.clone())
+        .with_mint(
+            MintBuilder::new()
+                .with_asset(new_asset.clone())
+                .using_redeemer(()),
         )
-        .output(
-            pallas_txbuilder::OutputBuilder::new()
-                .to_address(params.recipient.clone())
-                .with_asset(
-                    config.free_validator.clone(),
-                    params.token.clone(),
-                    params.quantity,
-                )
-                .with_min_lovelace()
-                .build()
-                .unwrap(),
+        .with_output(
+            OutputBuilder::new()
+                .address(params.recipient.clone())
+                .with_value(MinUtxoLovelace)
+                .with_value(new_asset.clone()),
         )
-        .add_mint_redeemer(
-            config.free_validator.clone(),
-            (),
-            Some(ExUnits { mem: 0, steps: 0 }),
-        );
+        .with_output(FeeChangeReturn(params.fuel.clone()));
 
-    let tx = tx.build_babbage_raw().unwrap();
-
-    Ok(UnsignedTx(tx.tx_bytes.as_ref().to_vec()))
+    Ok(NewTx(Box::new(tx)))
 }
 
-//#[balius::main]
-fn main() -> balius::Worker {
-    balius::Worker::new().handle_request("free-mint", free_mint)
+#[balius_sdk::main]
+fn main() -> Worker {
+    Worker::new().with_request_handler("claim", FnHandler::from(claim))
 }
-
-balius::entrypoint!(main);
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pallas_txbuilder::{Address, Hash, TxoRef};
-    use std::str::FromStr as _;
+    
+    use balius_sdk::txbuilder::{Address, Hash, UtxoSet, primitives};
+    
+    use std::{collections::HashMap, str::FromStr as _};
 
     #[test]
     fn test_free_mint() {
-        let config = Config {
-            free_validator: ReferenceScript {
+        let output = primitives::MintedTransactionOutput::PostAlonzo(primitives::MintedPostAlonzoTransactionOutput {
+            address: Address::from_bech32("addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x").unwrap().to_vec().into(),
+            value: primitives::Value::Coin(5_000_000),
+            datum_option: None,
+            script_ref: None,
+        });
+
+        let cbor = pallas_codec::minicbor::to_vec(&output).unwrap();
+
+        let test_utxos: HashMap<_, _> = vec![
+            ("f7d3837715680f3a170e99cd202b726842d97f82c05af8fcd18053c64e33ec4f#0".parse().unwrap(), cbor),
+        ].into_iter().collect();
+
+        let ledger = UtxoSet::from(test_utxos);
+
+        let config = FaucetConfig {
+            validator: ReferenceScript {
                 hash: Hash::from_str("ef7a1cebb2dc7de884ddf82f8fcbc91fe9750dcd8c12ec7643a99bbe").unwrap(),
                 address: Address::from_bech32("addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x").unwrap(),
-                ref_txo: TxoRef {
-                    hash: Hash::from_str(
+                ref_txo: primitives::TransactionInput { 
+                    transaction_id: Hash::from_str(
                         "f7d3837715680f3a170e99cd202b726842d97f82c05af8fcd18053c64e33ec4f",
                     )
                     .unwrap(),
@@ -80,12 +90,18 @@ mod tests {
             },
         };
 
-        let request = FreeMintRequest {
-            token: AssetName::new("TEST".as_bytes().to_vec()).unwrap(),
+        let request = ClaimRequest {
+            token: AssetName::new(b"TEST".to_vec().into()).unwrap(),
             quantity: 1,
             recipient: Address::from_bech32("addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x").unwrap(),
+            fuel: UtxoSource::Refs(vec!["f7d3837715680f3a170e99cd202b726842d97f82c05af8fcd18053c64e33ec4f#0".parse().unwrap()]),
         };
 
-        free_mint(Env(config), Json(request)).unwrap();
+        let tx = claim(Config(config), Params(request)).unwrap();
+
+        let tx = balius_sdk::txbuilder::build(tx, ledger).unwrap();
+
+        dbg!(&tx);
+        dbg!(hex::encode(pallas_codec::minicbor::to_vec(&tx).unwrap()));
     }
 }

@@ -1,4 +1,4 @@
-package balius:odk;
+package balius:app@0.1.0;
 
 interface kv {
     type payload = list<u8>;
