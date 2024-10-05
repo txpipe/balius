@@ -4,13 +4,20 @@ use std::{collections::HashSet, path::Path};
 use thiserror::Error;
 
 mod wit {
-    wasmtime::component::bindgen!(in "../wit");
+    wasmtime::component::bindgen!({
+        path:"../wit",
+        async: true,
+        tracing: true,
+    });
 }
 
 mod adapter;
 mod loader;
 mod router;
 mod store;
+
+// implementations
+pub mod ledgers;
 
 pub use store::Store;
 
@@ -38,6 +45,9 @@ pub enum Error {
 
     #[error("address in block failed to parse")]
     BadAddress(pallas::ledger::addresses::Error),
+
+    #[error("ledger error: {0}")]
+    Ledger(String),
 }
 
 impl From<wasmtime::Error> for Error {
@@ -95,16 +105,18 @@ pub struct Runtime {
     loader: loader::Loader,
     router: router::Router,
     store: store::Store,
+    ledger: ledgers::Ledger,
 }
 
 impl Runtime {
-    pub fn new(store: store::Store) -> Result<Self, Error> {
+    pub fn new(store: store::Store, ledger: ledgers::Ledger) -> Result<Self, Error> {
         let router = router::Router::new();
 
         Ok(Self {
             loader: loader::Loader::new(router.clone())?,
             router,
             store,
+            ledger,
         })
     }
 
@@ -114,18 +126,20 @@ impl Runtime {
         Ok(cursor)
     }
 
-    pub fn register_worker(
+    pub async fn register_worker(
         &mut self,
         id: &str,
         wasm_path: impl AsRef<Path>,
         config: serde_json::Value,
     ) -> Result<(), Error> {
-        self.loader.register_worker(id, wasm_path, config)?;
+        self.loader
+            .register_worker(id, wasm_path, config, self.ledger.clone())
+            .await?;
 
         Ok(())
     }
 
-    fn fire_and_forget(
+    async fn fire_and_forget(
         &self,
         event: &wit::Event,
         targets: HashSet<router::Target>,
@@ -133,7 +147,8 @@ impl Runtime {
         for target in targets {
             let result = self
                 .loader
-                .dispatch_event(&target.worker, target.channel, event);
+                .dispatch_event(&target.worker, target.channel, event)
+                .await;
 
             match result {
                 Ok(wit::Response::Acknowledge) => {
@@ -152,13 +167,17 @@ impl Runtime {
         Ok(())
     }
 
-    pub fn apply_block(&self, block: &MultiEraBlock, wal_seq: LogSeq) -> Result<(), Error> {
+    pub async fn apply_block(
+        &self,
+        block: &MultiEraBlock<'_>,
+        wal_seq: LogSeq,
+    ) -> Result<(), Error> {
         for tx in block.txs() {
             for utxo in tx.outputs() {
                 let targets = self.router.find_utxo_targets(&utxo)?;
                 let event = wit::Event::Utxo(utxo.encode());
 
-                self.fire_and_forget(&event, targets)?;
+                self.fire_and_forget(&event, targets).await?;
             }
         }
 
@@ -169,7 +188,7 @@ impl Runtime {
         Ok(())
     }
 
-    pub fn handle_request(
+    pub async fn handle_request(
         &self,
         worker: &str,
         method: &str,
@@ -181,7 +200,8 @@ impl Runtime {
 
         let reply = self
             .loader
-            .dispatch_event(&target.worker, target.channel, &evt)?;
+            .dispatch_event(&target.worker, target.channel, &evt)
+            .await?;
 
         let json = match reply {
             wit::Response::Acknowledge => json!({}),
