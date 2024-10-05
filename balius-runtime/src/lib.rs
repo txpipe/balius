@@ -12,8 +12,6 @@ mod loader;
 mod router;
 mod store;
 
-pub use loader::Loader;
-pub use router::Router;
 pub use store::Store;
 
 pub type WorkerId = String;
@@ -29,8 +27,8 @@ pub enum Error {
     #[error("worker not found '{0}'")]
     WorkerNotFound(WorkerId),
 
-    #[error("worker failed to handle event (code: '{0}')")]
-    Handle(u32),
+    #[error("worker failed to handle event (code: '{0}', message: '{1}')")]
+    Handle(u32, String),
 
     #[error("no target available to solve request")]
     NoTarget,
@@ -94,17 +92,17 @@ pub type LogSeq = u64;
 
 #[derive(Clone)]
 pub struct Runtime {
-    loader: Loader,
-    router: Router,
-    store: Store,
+    loader: loader::Loader,
+    router: router::Router,
+    store: store::Store,
 }
 
 impl Runtime {
-    pub fn new(store: Store) -> Result<Self, Error> {
-        let router = Router::new();
+    pub fn new(store: store::Store) -> Result<Self, Error> {
+        let router = router::Router::new();
 
         Ok(Self {
-            loader: Loader::new(router.clone())?,
+            loader: loader::Loader::new(router.clone())?,
             router,
             store,
         })
@@ -116,8 +114,13 @@ impl Runtime {
         Ok(cursor)
     }
 
-    pub fn register_worker(&mut self, id: &str, wasm_path: impl AsRef<Path>) -> Result<(), Error> {
-        self.loader.register_worker(id, wasm_path)?;
+    pub fn register_worker(
+        &mut self,
+        id: &str,
+        wasm_path: impl AsRef<Path>,
+        config: serde_json::Value,
+    ) -> Result<(), Error> {
+        self.loader.register_worker(id, wasm_path, config)?;
 
         Ok(())
     }
@@ -139,8 +142,8 @@ impl Runtime {
                 Ok(_) => {
                     tracing::warn!(worker = target.worker, "worker returned unexpected data");
                 }
-                Err(Error::Handle(code)) => {
-                    tracing::warn!(code, "worker error");
+                Err(Error::Handle(code, message)) => {
+                    tracing::warn!(code, message);
                 }
                 Err(e) => return Err(e),
             }

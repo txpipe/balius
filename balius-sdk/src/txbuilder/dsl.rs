@@ -12,17 +12,6 @@ pub type Value = pallas_primitives::babbage::Value;
 pub type Bytes = pallas_codec::utils::Bytes;
 pub type KeyValuePairs<K, V> = pallas_codec::utils::KeyValuePairs<K, V>;
 
-pub struct PParams {
-    pub min_fee_a: u64,
-    pub min_fee_b: u64,
-    pub min_utxo_value: u64,
-}
-
-pub trait Ledger {
-    fn read_utxos(&self, refs: &[TxoRef]) -> Result<UtxoSet, BuildError>;
-    fn search_utxos(&self, pattern: &UtxoPattern) -> Result<UtxoSet, BuildError>;
-}
-
 pub type Cbor = Vec<u8>;
 
 #[derive(Debug, Clone, Default)]
@@ -41,6 +30,12 @@ impl UtxoSet {
         self.0
             .values()
             .map(|v| MultiEraOutput::decode(pallas_traverse::Era::Babbage, v).unwrap())
+    }
+}
+
+impl FromIterator<(TxoRef, Cbor)> for UtxoSet {
+    fn from_iter<T: IntoIterator<Item = (TxoRef, Cbor)>>(iter: T) -> Self {
+        Self(HashMap::from_iter(iter))
     }
 }
 
@@ -67,46 +62,6 @@ impl Ledger for UtxoSet {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct UtxoPattern;
-
-pub struct BuildContext {
-    pub network: babbage::NetworkId,
-    pub pparams: PParams,
-    pub estimated_fee: u64,
-    pub ledger: Box<dyn Ledger>,
-
-    pub tx_body: Option<babbage::TransactionBody>,
-}
-
-impl BuildContext {
-    pub fn mint_redeemer_index(&self, policy: Hash<28>) -> Result<u32, BuildError> {
-        if let Some(tx_body) = &self.tx_body {
-            let mut out: Vec<_> = tx_body
-                .mint
-                .iter()
-                .flat_map(|x| x.iter())
-                .map(|(p, _)| *p)
-                .collect();
-
-            out.sort();
-            out.dedup();
-
-            if let Some(index) = out.iter().position(|p| *p == policy) {
-                return Ok(index as u32);
-            }
-        }
-
-        Err(BuildError::RedeemerTargetMissing)
-    }
-
-    pub fn eval_ex_units(
-        &self,
-        _script: Hash<28>,
-        _data: &babbage::PlutusData,
-    ) -> babbage::ExUnits {
-        // TODO
-        babbage::ExUnits { mem: 8, steps: 8 }
-    }
-}
 
 pub trait InputExpr: 'static + Send + Sync {
     fn eval(&self, ctx: &BuildContext) -> Result<Vec<babbage::TransactionInput>, BuildError>;
@@ -230,7 +185,6 @@ impl std::ops::Deref for AssetName {
     }
 }
 
-// TODO: Don't want our wrapper types in fields public
 #[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Hash, Clone)]
 pub struct TxoRef {
     pub hash: Hash<32>,
@@ -245,6 +199,21 @@ impl std::str::FromStr for TxoRef {
         let hash = Hash::from_str(hash).map_err(|_| BuildError::MalformedTxoRef)?;
         let index = index.parse().map_err(|_| BuildError::MalformedTxoRef)?;
         Ok(TxoRef::new(hash, index))
+    }
+}
+
+impl From<crate::wit::balius::app::ledger::TxoRef> for TxoRef {
+    fn from(value: crate::wit::balius::app::ledger::TxoRef) -> Self {
+        Self::new(Hash::from(value.tx_hash.as_slice()), value.tx_index as u64)
+    }
+}
+
+impl Into<crate::wit::balius::app::ledger::TxoRef> for TxoRef {
+    fn into(self) -> crate::wit::balius::app::ledger::TxoRef {
+        crate::wit::balius::app::ledger::TxoRef {
+            tx_hash: self.hash.to_vec(),
+            tx_index: self.index as u32,
+        }
     }
 }
 
@@ -509,19 +478,19 @@ impl MintBuilder {
 }
 
 impl MintExpr for MintBuilder {
-    fn eval(&self, ctx: &BuildContext) -> Result<babbage::Mint, BuildError> {
+    fn eval(&self, ctx: &BuildContext) -> Result<primitives::Mint, BuildError> {
         let out = HashMap::new();
 
         let out = self.assets.iter().try_fold(out, |mut acc, v| {
             let v = v.eval_as_mint(ctx)?;
             asset_math::fold_multiassets(&mut acc, v);
-            Ok(acc)
+            Result::<_, BuildError>::Ok(acc)
         })?;
 
         let out = self.burn.iter().try_fold(out, |mut acc, v| {
             let v = v.eval_as_burn(ctx)?;
             asset_math::fold_multiassets(&mut acc, v);
-            Ok(acc)
+            Result::<_, BuildError>::Ok(acc)
         })?;
 
         let mint: HashMap<_, _> = out
@@ -614,7 +583,7 @@ impl<T: TxExpr> TxExpr for &'static T {
     }
 }
 
-impl<T: TxExpr> TxExpr for Box<T> {
+impl TxExpr for Box<dyn TxExpr> {
     fn eval_body(&self, ctx: &BuildContext) -> Result<babbage::TransactionBody, BuildError> {
         (**self).eval_body(ctx)
     }

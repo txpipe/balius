@@ -18,9 +18,9 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
         struct _Main;
 
         impl balius_sdk::wit::Guest for _Main {
-            fn init(env: balius_sdk::wit::Env) {
+            fn init(config: balius_sdk::wit::Config) {
                 let worker = #func_name();
-                balius_sdk::_internal::global_init_worker(env, worker);
+                balius_sdk::_internal::global_init_worker(config, worker);
             }
 
             fn handle(

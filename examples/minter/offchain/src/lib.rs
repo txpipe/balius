@@ -97,9 +97,11 @@ mod tests {
             fuel: UtxoSource::Refs(vec!["f7d3837715680f3a170e99cd202b726842d97f82c05af8fcd18053c64e33ec4f#0".parse().unwrap()]),
         };
 
+        dbg!(serde_json::to_string(&request).unwrap());
+
         let tx = claim(Config(config), Params(request)).unwrap();
 
-        let tx = balius_sdk::txbuilder::build(tx, ledger).unwrap();
+        let tx = balius_sdk::txbuilder::build(tx.0, ledger).unwrap();
 
         dbg!(&tx);
         dbg!(hex::encode(pallas_codec::minicbor::to_vec(&tx).unwrap()));
