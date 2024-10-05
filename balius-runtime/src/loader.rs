@@ -6,7 +6,7 @@ use std::{
 
 use wasmtime::{component::Component, component::Linker, Engine, Store};
 
-use crate::{adapter::Adapter, router::Router, wit};
+use crate::{adapter::Adapter, ledgers, router::Router, wit};
 
 struct LoadedWorker {
     store: Store<Adapter>,
@@ -25,13 +25,18 @@ pub struct Loader {
 
 impl Loader {
     pub fn new(router: Router) -> Result<Self, super::Error> {
-        let engine = Default::default();
+        let mut config = wasmtime::Config::new();
+        config.async_support(true);
+
+        let engine = Engine::new(&config).unwrap();
 
         let mut linker = Linker::new(&engine);
         wit::balius::app::driver::add_to_linker(&mut linker, |state: &mut Adapter| state)?;
         wit::balius::app::kv::add_to_linker(&mut linker, |state: &mut Adapter| state)?;
         wit::balius::app::submit::add_to_linker(&mut linker, |state: &mut Adapter| state)?;
-        wit::balius::app::ledger::add_to_linker(&mut linker, |state: &mut Adapter| state)?;
+        wit::balius::app::ledger::add_to_linker(&mut linker, |state: &mut Adapter| {
+            &mut state.ledger
+        })?;
 
         Ok(Self {
             engine,
@@ -41,22 +46,24 @@ impl Loader {
         })
     }
 
-    pub fn register_worker(
+    pub async fn register_worker(
         &mut self,
         id: &str,
         wasm_path: impl AsRef<Path>,
         config: serde_json::Value,
+        ledger: ledgers::Ledger,
     ) -> wasmtime::Result<()> {
         let component = Component::from_file(&self.engine, wasm_path)?;
 
         let mut store = Store::new(
             &self.engine,
-            Adapter::new(id.to_owned(), self.router.clone()),
+            Adapter::new(id.to_owned(), self.router.clone(), ledger),
         );
 
-        let instance = wit::Worker::instantiate(&mut store, &component, &self.linker)?;
+        let instance = wit::Worker::instantiate_async(&mut store, &component, &self.linker).await?;
+
         let config = serde_json::to_vec(&config).unwrap();
-        instance.call_init(&mut store, &config)?;
+        instance.call_init(&mut store, &config).await?;
 
         self.loaded
             .lock()
@@ -66,7 +73,7 @@ impl Loader {
         Ok(())
     }
 
-    pub fn dispatch_event(
+    pub async fn dispatch_event(
         &self,
         worker: &str,
         channel: u32,
@@ -80,7 +87,8 @@ impl Loader {
 
         let result = worker
             .instance
-            .call_handle(&mut worker.store, channel, event)?;
+            .call_handle(&mut worker.store, channel, event)
+            .await?;
 
         let response = result.map_err(|err| super::Error::Handle(err.code, err.message))?;
 
