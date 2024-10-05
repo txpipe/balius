@@ -6,15 +6,37 @@ use crate::wit;
 #[derive(Debug)]
 pub enum Error {
     Internal(String),
+    BadConfig,
+    BadParams,
     Ledger(wit::balius::app::ledger::LedgerError),
 }
 
 impl From<Error> for wit::HandleError {
     fn from(error: Error) -> Self {
         match error {
-            Error::Internal(_) => 0,
-            Error::Ledger(e) => e.into(),
+            Error::Internal(x) => wit::HandleError {
+                code: 0,
+                message: x,
+            },
+            Error::BadConfig => wit::HandleError {
+                code: 1,
+                message: "bad config".to_owned(),
+            },
+            Error::BadParams => wit::HandleError {
+                code: 2,
+                message: "bad params".to_owned(),
+            },
+            Error::Ledger(e) => wit::HandleError {
+                code: e,
+                message: "ledger error".to_string(),
+            },
         }
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(error: serde_json::Error) -> Self {
+        Error::Internal(error.to_string())
     }
 }
 
@@ -24,14 +46,20 @@ impl From<wit::balius::app::ledger::LedgerError> for Error {
     }
 }
 
+impl From<crate::txbuilder::BuildError> for Error {
+    fn from(error: crate::txbuilder::BuildError) -> Self {
+        Error::Internal(error.to_string())
+    }
+}
+
 pub type WorkerResult<T> = std::result::Result<T, Error>;
 
 pub struct FnHandler<F, C, E, R>
 where
     F: Fn(C, E) -> WorkerResult<R> + 'static,
-    C: From<wit::Env>,
-    E: From<wit::Event>,
-    R: Into<wit::Response>,
+    C: TryFrom<wit::Config>,
+    E: TryFrom<wit::Event>,
+    R: TryInto<wit::Response>,
 {
     func: F,
     phantom: PhantomData<(C, E)>,
@@ -39,28 +67,28 @@ where
 
 impl<F, C, E, R> Handler for FnHandler<F, C, E, R>
 where
-    C: From<wit::Env> + Send + Sync + 'static,
-    E: From<wit::Event> + Send + Sync + 'static,
-    R: Into<wit::Response> + Send + Sync + 'static,
+    C: TryFrom<wit::Config, Error = Error> + Send + Sync + 'static,
+    E: TryFrom<wit::Event, Error = Error> + Send + Sync + 'static,
+    R: TryInto<wit::Response, Error = Error> + Send + Sync + 'static,
     F: Fn(C, E) -> WorkerResult<R> + Send + Sync + 'static,
 {
     fn handle(
         &self,
-        config: wit::Env,
+        config: wit::Config,
         event: wit::Event,
     ) -> Result<wit::Response, wit::HandleError> {
-        let config: C = config.into();
-        let event: E = event.into();
+        let config: C = config.try_into()?;
+        let event: E = event.try_into()?;
         let response = (self.func)(config, event)?;
-        Ok(response.into())
+        Ok(response.try_into()?)
     }
 }
 
 impl<F, C, E, R> From<F> for FnHandler<F, C, E, R>
 where
-    C: From<wit::Env> + Send + Sync + 'static,
-    E: From<wit::Event> + Send + Sync + 'static,
-    R: Into<wit::Response> + Send + Sync + 'static,
+    C: TryFrom<wit::Config, Error = Error> + Send + Sync + 'static,
+    E: TryFrom<wit::Event, Error = Error> + Send + Sync + 'static,
+    R: TryInto<wit::Response, Error = Error> + Send + Sync + 'static,
     F: Fn(C, E) -> WorkerResult<R> + Send + Sync + 'static,
 {
     fn from(func: F) -> Self {
@@ -73,13 +101,15 @@ where
 
 pub struct Config<T>(pub T);
 
-impl<T> From<wit::Env> for Config<T>
+impl<T> TryFrom<wit::Config> for Config<T>
 where
     T: serde::de::DeserializeOwned,
 {
-    fn from(env: wit::Env) -> Self {
-        let t = serde_json::from_slice(env.as_slice()).unwrap();
-        Config(t)
+    type Error = Error;
+
+    fn try_from(config: wit::Config) -> Result<Self, Self::Error> {
+        let t = serde_json::from_slice(config.as_slice()).map_err(|_| Error::BadConfig)?;
+        Ok(Config(t))
     }
 }
 
@@ -93,18 +123,20 @@ impl<T> std::ops::Deref for Config<T> {
 
 pub struct Params<T>(pub T);
 
-impl<T> From<wit::Event> for Params<T>
+impl<T> TryFrom<wit::Event> for Params<T>
 where
     T: serde::de::DeserializeOwned,
 {
-    fn from(value: wit::Event) -> Self {
+    type Error = Error;
+
+    fn try_from(value: wit::Event) -> Result<Self, Self::Error> {
         let bytes = match value {
             wit::Event::Request(x) => x,
             _ => todo!(),
         };
 
-        let t = serde_json::from_slice(bytes.as_slice()).unwrap();
-        Params(t)
+        let t = serde_json::from_slice(bytes.as_slice()).map_err(|_| Error::BadParams)?;
+        Ok(Params(t))
     }
 }
 
@@ -127,12 +159,15 @@ impl<T> std::ops::Deref for Params<T> {
 
 pub struct Json<T>(pub T);
 
-impl<T> From<Json<T>> for wit::Response
+impl<T> TryFrom<Json<T>> for wit::Response
 where
     T: serde::Serialize,
 {
-    fn from(value: Json<T>) -> Self {
-        Self::Json(serde_json::to_vec(&value.0).unwrap())
+    type Error = Error;
+
+    fn try_from(value: Json<T>) -> Result<Self, Self::Error> {
+        let bytes = serde_json::to_vec(&value.0)?;
+        Ok(wit::Response::Json(bytes))
     }
 }
 
@@ -146,28 +181,14 @@ impl<T> std::ops::Deref for Json<T> {
 
 pub struct NewTx(pub Box<dyn crate::txbuilder::TxExpr>);
 
-impl crate::txbuilder::TxExpr for NewTx {
-    fn eval_body(
-        &self,
-        ctx: &crate::txbuilder::BuildContext,
-    ) -> Result<crate::txbuilder::primitives::TransactionBody, crate::txbuilder::BuildError> {
-        self.0.eval_body(ctx)
-    }
+impl TryInto<wit::Response> for NewTx {
+    type Error = Error;
 
-    fn eval_witness_set(
-        &self,
-        ctx: &crate::txbuilder::BuildContext,
-    ) -> Result<crate::txbuilder::primitives::WitnessSet, crate::txbuilder::BuildError> {
-        self.0.eval_witness_set(ctx)
-    }
-}
-
-impl Into<wit::Response> for NewTx {
-    fn into(self) -> wit::Response {
-        // TODO: create a build context from the Balius world interface and evaluate the
-        // tx.
-
-        todo!()
+    fn try_into(self) -> Result<wit::Response, Self::Error> {
+        let ledger = crate::txbuilder::ExtLedgerFacade;
+        let tx = crate::txbuilder::build(self.0, ledger)?;
+        let cbor = pallas_codec::minicbor::to_vec(&tx).unwrap();
+        Ok(wit::Response::PartialTx(cbor))
     }
 }
 
@@ -176,8 +197,8 @@ impl crate::_internal::Worker {
         Self::default()
     }
 
-    pub(crate) fn init(&mut self, env: wit::Env) {
-        self.env = Some(env);
+    pub(crate) fn init(&mut self, config: wit::Config) {
+        self.config = Some(config);
     }
 
     pub fn with_request_handler(

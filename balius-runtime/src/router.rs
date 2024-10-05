@@ -12,15 +12,15 @@ type ChannelId = u32;
 type Method = String;
 type AddressBytes = Vec<u8>;
 
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum MatchKey {
     RequestMethod(WorkerId, Method),
     UtxoAddress(AddressBytes),
 }
 
-#[derive(PartialEq, Eq, Hash, Clone)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Target {
-    pub channel: u32,
+    pub channel: ChannelId,
     pub worker: String,
 }
 
@@ -34,11 +34,11 @@ fn infer_match_keys(worker: &str, pattern: &EventPattern) -> Vec<MatchKey> {
     }
 }
 
-type Routes = HashMap<MatchKey, HashSet<Target>>;
+type RouteMap = HashMap<MatchKey, HashSet<Target>>;
 
 #[derive(Default, Clone)]
 pub struct Router {
-    routes: Arc<RwLock<Routes>>,
+    routes: Arc<RwLock<RouteMap>>,
 }
 
 impl Router {
@@ -98,5 +98,24 @@ impl Router {
         let target = targets.iter().next().unwrap();
 
         Ok(target.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_request_channel() {
+        let mut router = Router::new();
+        let worker = "test_worker";
+        let method = "test_method";
+        let channel = 1;
+
+        router.register_channel(worker, channel, &EventPattern::Request(method.to_string()));
+
+        let target = router.find_request_target(worker, method).unwrap();
+        assert_eq!(target.worker, worker);
+        assert_eq!(target.channel, channel);
     }
 }

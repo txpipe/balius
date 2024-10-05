@@ -110,11 +110,16 @@ world worker {
     import submit;
     import ledger;
     
-    use driver.{event, handle-error, response};
+    use driver.{event, response};
 
-    type env = list<u8>;
+    type config = list<u8>;
 
-    export init: func(env: env); 
+    export init: func(config: config);
+    
+    record handle-error {
+        message: string,
+        code: u32,
+    }
 
     export handle: func(channel: u32, evt: event) -> result<response, handle-error>;
 }
