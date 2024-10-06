@@ -26,9 +26,9 @@ impl From<Error> for wit::HandleError {
                 code: 2,
                 message: "bad params".to_owned(),
             },
-            Error::Ledger(e) => wit::HandleError {
-                code: e,
-                message: "ledger error".to_string(),
+            Error::Ledger(err) => wit::HandleError {
+                code: 4,
+                message: err.to_string(),
             },
         }
     }

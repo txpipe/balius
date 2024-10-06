@@ -43,12 +43,14 @@ impl wit::Host for Ledger {
     async fn search_utxos(
         &mut self,
         pattern: wit::UtxoPattern,
-    ) -> Result<Vec<wit::Utxo>, wit::LedgerError> {
+        start: Option<String>,
+        max_items: u32,
+    ) -> Result<wit::UtxoPage, wit::LedgerError> {
         match self {
-            Ledger::Mock(ledger) => ledger.search_utxos(pattern).await,
+            Ledger::Mock(ledger) => ledger.search_utxos(pattern, start, max_items).await,
 
             #[cfg(feature = "utxorpc")]
-            Ledger::U5C(ledger) => ledger.search_utxos(pattern).await,
+            Ledger::U5C(ledger) => ledger.search_utxos(pattern, start, max_items).await,
         }
     }
 }

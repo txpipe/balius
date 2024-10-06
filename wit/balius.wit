@@ -10,8 +10,13 @@ interface kv {
 }
 
 interface ledger {
-    type ledger-error = u32;
     type cbor = list<u8>;
+
+    variant ledger-error {
+        upstream(string),
+        internal(string),
+        not-found(txo-ref)
+    }
     
     record txo-ref {
         tx-hash: list<u8>,
@@ -23,20 +28,27 @@ interface ledger {
         ref: txo-ref,
     }
 
-    type address = list<u8>;
+    record address-pattern {
+        exact-address: list<u8>,
+    }
 
-    record token-pattern {
+    record asset-pattern {
         policy: list<u8>,
         name: option<list<u8>>,
     }
 
     record utxo-pattern {
-        address: option<address>,
-        token: option<token-pattern>,
+        address: option<address-pattern>,
+        asset: option<asset-pattern>,
+    }
+
+    record utxo-page {
+        utxos: list<utxo>,
+        next-token: option<string>,
     }
 
     read-utxos: func(refs: list<txo-ref>) -> result<list<utxo>, ledger-error>;
-    search-utxos: func(pattern: utxo-pattern) -> result<list<utxo>, ledger-error>;
+    search-utxos: func(pattern: utxo-pattern, start: option<string>, max-items: u32) -> result<utxo-page, ledger-error>;
 }
 
 interface submit {

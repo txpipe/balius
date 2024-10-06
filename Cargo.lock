@@ -2119,7 +2119,7 @@ dependencies = [
  "pallas-primitives 0.30.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "pallas-traverse 0.30.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "prost-types 0.13.3",
- "utxorpc-spec 0.10.0",
+ "utxorpc-spec",
 ]
 
 [[package]]
@@ -3420,30 +3420,15 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "utxorpc"
-version = "0.6.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd7fd347aa5c43c481e71a37bde134a3e4a0b93ae631b9a80b0eb95f01f10d9c"
+checksum = "f8e5451435987e21c49b423626dfa2a84f8b2d30532e07a7fb8383186523fc0c"
 dependencies = [
  "bytes",
  "thiserror",
  "tokio",
  "tonic",
- "utxorpc-spec 0.9.0",
-]
-
-[[package]]
-name = "utxorpc-spec"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "66ae3390f4f25d7244d82207573bf7e8ce935f2a13d2c5d708fb27dde9840042"
-dependencies = [
- "bytes",
- "futures-core",
- "pbjson",
- "pbjson-types",
- "prost 0.12.6",
- "serde",
- "tonic",
+ "utxorpc-spec",
 ]
 
 [[package]]
