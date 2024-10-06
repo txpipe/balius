@@ -3,9 +3,8 @@ use crate::wit::balius::app::ledger as wit;
 #[derive(Clone)]
 pub struct Ledger;
 
-#[async_trait::async_trait]
-impl wit::Host for Ledger {
-    async fn read_utxos(
+impl Ledger {
+    pub async fn read_utxos(
         &mut self,
         _refs: Vec<wit::TxoRef>,
     ) -> Result<Vec<wit::Utxo>, wit::LedgerError> {
@@ -30,10 +29,12 @@ impl wit::Host for Ledger {
         }])
     }
 
-    async fn search_utxos(
+    pub async fn search_utxos(
         &mut self,
         _pattern: wit::UtxoPattern,
-    ) -> Result<Vec<wit::Utxo>, wit::LedgerError> {
+        _start: Option<String>,
+        _max_items: u32,
+    ) -> Result<wit::UtxoPage, wit::LedgerError> {
         todo!()
     }
 }
