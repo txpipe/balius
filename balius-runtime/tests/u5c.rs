@@ -1,4 +1,5 @@
 #![cfg(test)]
+#![cfg(feature = "utxorpc")]
 
 use balius_runtime::{ledgers, Runtime, Store};
 use serde_json::json;

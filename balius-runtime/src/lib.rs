@@ -1,9 +1,10 @@
 use pallas::ledger::traverse::MultiEraBlock;
 use serde_json::json;
+use tokio::sync::Mutex;
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 use thiserror::Error;
 
@@ -180,7 +181,7 @@ impl Runtime {
 
         self.loaded
             .lock()
-            .unwrap()
+            .await
             .insert(id.to_owned(), LoadedWorker { store, instance });
 
         Ok(())
@@ -192,7 +193,7 @@ impl Runtime {
         channel: u32,
         event: &wit::Event,
     ) -> Result<wit::Response, Error> {
-        let mut lock = self.loaded.lock().unwrap();
+        let mut lock = self.loaded.lock().await;
 
         let worker = lock
             .get_mut(worker)
