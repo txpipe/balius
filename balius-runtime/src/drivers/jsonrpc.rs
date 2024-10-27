@@ -6,7 +6,7 @@ use warp::Filter as _;
 
 use crate::{Error, Runtime};
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Config {
     pub listen_address: String,
 }

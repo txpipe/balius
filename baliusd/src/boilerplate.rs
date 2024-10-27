@@ -1,3 +1,4 @@
+use serde::de::DeserializeOwned;
 use std::time::Duration;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -97,4 +98,27 @@ pub async fn run_pipeline(pipeline: gasket::daemon::Daemon, exit: CancellationTo
 #[allow(dead_code)]
 pub fn spawn_pipeline(pipeline: gasket::daemon::Daemon, exit: CancellationToken) -> JoinHandle<()> {
     tokio::spawn(run_pipeline(pipeline, exit))
+}
+
+pub fn load_config<T>(explicit_file: &Option<std::path::PathBuf>) -> Result<T, config::ConfigError>
+where
+    T: DeserializeOwned,
+{
+    let mut s = config::Config::builder();
+
+    // our base config will always be in /etc/dolos
+    s = s.add_source(config::File::with_name("/etc/baliusd/daemon.toml").required(false));
+
+    // but we can override it by having a file in the working dir
+    s = s.add_source(config::File::with_name("baliusd.toml").required(false));
+
+    // if an explicit file was passed, then we load it as mandatory
+    if let Some(explicit) = explicit_file.as_ref().and_then(|x| x.to_str()) {
+        s = s.add_source(config::File::with_name(explicit).required(true));
+    }
+
+    // finally, we use env vars to make some last-step overrides
+    s = s.add_source(config::Environment::with_prefix("BALIUSD").separator("_"));
+
+    s.build()?.try_deserialize()
 }

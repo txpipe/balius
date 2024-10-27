@@ -78,7 +78,7 @@ impl From<utxorpc::UtxoPage<utxorpc::Cardano>> for wit::UtxoPage {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Config {
     pub endpoint_url: String,
     pub api_key: String,
