@@ -32,7 +32,7 @@ async fn faucet_claim() {
     });
 
     runtime
-        .register_worker("faucet", "tests/faucet.wasm", config)
+        .register_worker("faucet", "tests/faucet.wasm", Some(config))
         .await
         .unwrap();
 

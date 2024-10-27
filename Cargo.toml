@@ -9,5 +9,5 @@ members = [
     "examples/minter/offchain",
     "balius-sdk",
     "balius-runtime",
-    "balius-macros",
+    "balius-macros", "baliusd",
 ]

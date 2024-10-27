@@ -1,12 +1,12 @@
 use pallas::ledger::traverse::MultiEraBlock;
 use serde_json::json;
-use tokio::sync::Mutex;
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
     sync::Arc,
 };
 use thiserror::Error;
+use tokio::sync::Mutex;
 
 mod wit {
     wasmtime::component::bindgen!({
@@ -20,6 +20,7 @@ mod router;
 mod store;
 
 // implementations
+pub mod drivers;
 pub mod kv;
 pub mod ledgers;
 pub mod submit;
@@ -53,6 +54,9 @@ pub enum Error {
 
     #[error("ledger error: {0}")]
     Ledger(String),
+
+    #[error("config error: {0}")]
+    Config(String),
 }
 
 impl From<wasmtime::Error> for Error {
@@ -159,8 +163,8 @@ impl Runtime {
         &mut self,
         id: &str,
         wasm_path: impl AsRef<Path>,
-        config: serde_json::Value,
-    ) -> wasmtime::Result<()> {
+        config: Option<serde_json::Value>,
+    ) -> Result<(), Error> {
         let component = wasmtime::component::Component::from_file(&self.engine, wasm_path)?;
 
         let mut store = wasmtime::Store::new(

@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use utxorpc::CardanoQueryClient;
 
 use crate::wit::balius::app::ledger as wit;
@@ -77,6 +78,7 @@ impl From<utxorpc::UtxoPage<utxorpc::Cardano>> for wit::UtxoPage {
     }
 }
 
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Config {
     pub endpoint_url: String,
     pub api_key: String,
