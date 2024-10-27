@@ -163,7 +163,7 @@ impl Runtime {
         &mut self,
         id: &str,
         wasm_path: impl AsRef<Path>,
-        config: Option<serde_json::Value>,
+        config: serde_json::Value,
     ) -> Result<(), Error> {
         let component = wasmtime::component::Component::from_file(&self.engine, wasm_path)?;
 
