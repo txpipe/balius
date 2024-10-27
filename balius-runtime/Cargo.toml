@@ -20,6 +20,7 @@ hex = "0.4.3"
 itertools = "0.13.0"
 async-trait = "0.1.83"
 utxorpc = { version = "0.7.1", optional = true }
+tokio-util = "0.7.12"
 
 [dev-dependencies]
 tokio = "1.40.0"

@@ -1,0 +1,80 @@
+use std::path::PathBuf;
+
+use balius_runtime::{drivers, ledgers, Runtime, Store};
+use miette::{Context as _, IntoDiagnostic as _};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use serde_with::{serde_as, DisplayFromStr};
+use tracing::info;
+
+mod boilerplate;
+
+#[serde_as]
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct LoggingConfig {
+    #[serde_as(as = "DisplayFromStr")]
+    max_level: tracing::Level,
+
+    #[serde(default)]
+    include_tokio: bool,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct WorkerConfig {
+    pub name: String,
+    pub module: PathBuf,
+    pub since_slot: Option<u64>,
+    pub until_slot: Option<u64>,
+    pub config: Option<serde_json::Value>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct Config {
+    pub rpc: drivers::jsonrpc::Config,
+    pub ledger: ledgers::u5c::Config,
+    pub workers: Vec<WorkerConfig>,
+    pub logging: LoggingConfig,
+}
+
+#[tokio::main]
+async fn main() -> miette::Result<()> {
+    let config: Config = boilerplate::load_config(&None)
+        .into_diagnostic()
+        .context("loading config")?;
+
+    boilerplate::setup_tracing(&config.logging).unwrap();
+
+    let store = Store::open("baliusd.db", None)
+        .into_diagnostic()
+        .context("opening store")?;
+
+    let ledger = ledgers::u5c::Ledger::new(config.ledger)
+        .await
+        .into_diagnostic()
+        .context("setting up ledger")?;
+
+    let mut runtime = Runtime::builder(store)
+        .with_ledger(ledger.into())
+        .build()
+        .into_diagnostic()
+        .context("setting up runtime")?;
+
+    for worker in config.workers {
+        runtime
+            .register_worker(&worker.name, worker.module, worker.config)
+            .await
+            .into_diagnostic()
+            .context("registering worker")?;
+
+        info!(name = worker.name, "registered worker");
+    }
+
+    let cancel = boilerplate::hook_exit_token();
+
+    balius_runtime::drivers::jsonrpc::serve(config.rpc, runtime, cancel)
+        .await
+        .into_diagnostic()
+        .context("serving json-rpc requests")?;
+
+    Ok(())
+}
