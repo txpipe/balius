@@ -111,6 +111,7 @@ pub type LogSeq = u64;
 
 struct WorkerState {
     pub worker_id: String,
+    pub cursor: Option<LogSeq>,
     pub router: router::Router,
     pub ledger: Option<ledgers::Ledger>,
     pub kv: Option<kv::Kv>,
@@ -129,7 +130,7 @@ impl wit::balius::app::driver::Host for WorkerState {
 }
 
 struct LoadedWorker {
-    store: wasmtime::Store<WorkerState>,
+    wasm_store: wasmtime::Store<WorkerState>,
     instance: wit::Worker,
 }
 
@@ -153,10 +154,9 @@ impl Runtime {
         RuntimeBuilder::new(store)
     }
 
-    pub fn cursor(&self) -> Result<Option<LogSeq>, Error> {
-        let cursor = self.store.lowest_cursor()?;
-
-        Ok(cursor)
+    pub fn chain_cursor(&self) -> Result<Option<ChainPoint>, Error> {
+        // TODO: iterate over all workers and find the lowest cursor
+        todo!()
     }
 
     pub async fn register_worker(
@@ -167,10 +167,11 @@ impl Runtime {
     ) -> Result<(), Error> {
         let component = wasmtime::component::Component::from_file(&self.engine, wasm_path)?;
 
-        let mut store = wasmtime::Store::new(
+        let mut wasm_store = wasmtime::Store::new(
             &self.engine,
             WorkerState {
                 worker_id: id.to_owned(),
+                cursor: self.store.get_worker_cursor(id)?,
                 router: self.router.clone(),
                 ledger: self.ledger.clone(),
                 kv: self.kv.clone(),
@@ -178,15 +179,19 @@ impl Runtime {
             },
         );
 
-        let instance = wit::Worker::instantiate_async(&mut store, &component, &self.linker).await?;
+        let instance =
+            wit::Worker::instantiate_async(&mut wasm_store, &component, &self.linker).await?;
 
         let config = serde_json::to_vec(&config).unwrap();
-        instance.call_init(&mut store, &config).await?;
+        instance.call_init(&mut wasm_store, &config).await?;
 
-        self.loaded
-            .lock()
-            .await
-            .insert(id.to_owned(), LoadedWorker { store, instance });
+        self.loaded.lock().await.insert(
+            id.to_owned(),
+            LoadedWorker {
+                wasm_store,
+                instance,
+            },
+        );
 
         Ok(())
     }
@@ -205,7 +210,7 @@ impl Runtime {
 
         let result = worker
             .instance
-            .call_handle(&mut worker.store, channel, event)
+            .call_handle(&mut worker.wasm_store, channel, event)
             .await?;
 
         let response = result.map_err(|err| Error::Handle(err.code, err.message))?;
@@ -240,13 +245,19 @@ impl Runtime {
         Ok(())
     }
 
-    pub async fn apply_block(
+    async fn dispatch_apply_block(
         &self,
         block: &MultiEraBlock<'_>,
-        wal_seq: LogSeq,
+        log_seq: LogSeq,
     ) -> Result<(), Error> {
+        // TODO: to make each worker apply an atomic operation, it's easier to dispatch
+        // events per-worker. We could refactor the router approach so that each
+        // LoadedWorker has it's own map of channels. It could be less efficient on a
+        // very long list of workers, but I'm now worried about that optimization in the
+        // short-term
+
         for tx in block.txs() {
-            for utxo in tx.outputs() {
+            for (_, utxo) in tx.produces() {
                 let targets = self.router.find_utxo_targets(&utxo)?;
                 let event = wit::Event::Utxo(utxo.encode());
 
@@ -254,10 +265,21 @@ impl Runtime {
             }
         }
 
+        // TODO: update worker cursor
+
         Ok(())
     }
 
-    pub fn undo_block(&self, block: &MultiEraBlock, wal_seq: LogSeq) -> Result<(), Error> {
+    pub async fn apply_block(&self, block: &MultiEraBlock<'_>) -> Result<(), Error> {
+        let log_seq = self.store.write_ahead(block)?;
+
+        self.dispatch_apply_block(block, log_seq).await?;
+
+        Ok(())
+    }
+
+    // TODO: implement undo once we have "apply" working
+    pub async fn undo_block(&self, block: &MultiEraBlock<'_>) -> Result<(), Error> {
         Ok(())
     }
 
