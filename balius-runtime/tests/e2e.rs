@@ -43,7 +43,7 @@ async fn faucet_claim() {
     });
 
     let res = runtime
-        .handle_request("faucet", "claim", req)
+        .handle_request("faucet", "claim", serde_json::to_vec(&req).unwrap())
         .await
         .unwrap();
 

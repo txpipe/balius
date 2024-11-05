@@ -124,10 +124,9 @@ mod tests {
 
     #[test]
     fn test_add_values_same_asset() {
-        let policy_id = Hash::<28>::from_str(
-            "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-        )
-        .unwrap();
+        let policy_id =
+            Hash::<28>::from_str("bb4bc871e84078de932d392186dd3093b8de93505178d88d89b7ac98")
+                .unwrap();
 
         let asset_name = "pepe".as_bytes().to_vec();
 

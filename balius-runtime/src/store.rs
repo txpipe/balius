@@ -2,7 +2,7 @@ use std::{path::Path, sync::Arc};
 
 use itertools::Itertools;
 use pallas::ledger::traverse::MultiEraBlock;
-use redb::{ReadableTable as _, TableDefinition};
+use redb::{ReadableTable as _, TableDefinition, WriteTransaction};
 use tracing::warn;
 
 use crate::Error;
@@ -13,6 +13,24 @@ pub type LogSeq = u64;
 const CURSORS: TableDefinition<WorkerId, LogSeq> = TableDefinition::new("cursors");
 
 const DEFAULT_CACHE_SIZE_MB: usize = 50;
+
+pub struct AtomicUpdate {
+    wx: WriteTransaction,
+}
+
+impl AtomicUpdate {
+    pub fn set_worker_cursor(&mut self, id: &str, cursor: LogSeq) -> Result<(), super::Error> {
+        let mut table = self.wx.open_table(CURSORS)?;
+        table.insert(id.to_owned(), cursor)?;
+
+        Ok(())
+    }
+
+    pub fn commit(self) -> Result<(), super::Error> {
+        self.wx.commit()?;
+        Ok(())
+    }
+}
 
 #[derive(Clone)]
 pub struct Store {
@@ -43,9 +61,20 @@ impl Store {
     // TODO: see if loading in batch is worth it
     pub fn get_worker_cursor(&self, id: &str) -> Result<Option<LogSeq>, super::Error> {
         let rx = self.db.begin_read()?;
-        let table = rx.open_table(CURSORS)?;
+
+        let table = match rx.open_table(CURSORS) {
+            Ok(table) => table,
+            Err(redb::TableError::TableDoesNotExist(_)) => return Ok(None),
+            Err(e) => return Err(e.into()),
+        };
+
         let cursor = table.get(id.to_owned())?;
         Ok(cursor.map(|x| x.value()))
+    }
+
+    pub fn start_atomic_update(&self) -> Result<AtomicUpdate, super::Error> {
+        let wx = self.db.begin_write()?;
+        Ok(AtomicUpdate { wx })
     }
 
     // TODO: I don't think we need this since we're going to load each cursor as

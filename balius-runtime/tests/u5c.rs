@@ -43,7 +43,7 @@ async fn faucet_claim() {
       "fuel": {
         "Refs": [
           {
-            "hash": "6ac91cdc14155f56c8819740ec334c1e3ff5f9055ba27909045e31ebd329b783",
+            "hash": "1d85738732cf49481b22e440191c747e643841d59c94e935d3ad2c016729a066",
             "index": 0
           }
         ]
@@ -51,7 +51,7 @@ async fn faucet_claim() {
     });
 
     let res = runtime
-        .handle_request("faucet", "claim", req)
+        .handle_request("faucet", "claim", serde_json::to_vec(&req).unwrap())
         .await
         .unwrap();
 
