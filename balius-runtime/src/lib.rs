@@ -1,4 +1,5 @@
 use pallas::ledger::traverse::MultiEraBlock;
+use router::Router;
 use serde_json::json;
 use std::{
     collections::{HashMap, HashSet},
@@ -89,6 +90,12 @@ impl From<redb::TableError> for Error {
     }
 }
 
+impl From<redb::CommitError> for Error {
+    fn from(value: redb::CommitError) -> Self {
+        Self::Store(value.into())
+    }
+}
+
 impl From<redb::StorageError> for Error {
     fn from(value: redb::StorageError) -> Self {
         Self::Store(value.into())
@@ -124,13 +131,64 @@ impl wit::balius::app::driver::Host for WorkerState {
         id: u32,
         pattern: wit::balius::app::driver::EventPattern,
     ) -> () {
-        self.router.register_channel(&self.worker_id, id, &pattern);
+        self.router.register_channel(id, &pattern);
     }
 }
 
 struct LoadedWorker {
-    store: wasmtime::Store<WorkerState>,
+    wasm_store: wasmtime::Store<WorkerState>,
     instance: wit::Worker,
+}
+
+impl LoadedWorker {
+    pub async fn dispatch_event(
+        &mut self,
+        channel: u32,
+        event: &wit::Event,
+    ) -> Result<wit::Response, Error> {
+        self.instance
+            .call_handle(&mut self.wasm_store, channel, event)
+            .await?
+            .map_err(|err| Error::Handle(err.code, err.message))
+    }
+
+    async fn acknowledge_event(&mut self, channel: u32, event: &wit::Event) -> Result<(), Error> {
+        let result = self.dispatch_event(channel, event).await;
+
+        match result {
+            Ok(wit::Response::Acknowledge) => {
+                tracing::debug!("worker acknowledge");
+            }
+            Ok(_) => {
+                tracing::warn!("worker returned unexpected data");
+            }
+            Err(Error::Handle(code, message)) => {
+                tracing::warn!(code, message);
+            }
+            Err(e) => return Err(e),
+        }
+
+        Ok(())
+    }
+
+    async fn apply_block(
+        &mut self,
+        block: &MultiEraBlock<'_>,
+        log_seq: LogSeq,
+    ) -> Result<(), Error> {
+        for tx in block.txs() {
+            for (_, utxo) in tx.produces() {
+                let event = wit::Event::Utxo(utxo.encode());
+                let channels = self.wasm_store.data().router.find_utxo_targets(&utxo)?;
+
+                for channel in channels {
+                    self.acknowledge_event(channel, &event).await?;
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 type WorkerMap = HashMap<String, LoadedWorker>;
@@ -141,7 +199,6 @@ pub struct Runtime {
     linker: wasmtime::component::Linker<WorkerState>,
     loaded: Arc<Mutex<WorkerMap>>,
 
-    router: router::Router,
     store: store::Store,
     ledger: Option<ledgers::Ledger>,
     kv: Option<kv::Kv>,
@@ -153,10 +210,9 @@ impl Runtime {
         RuntimeBuilder::new(store)
     }
 
-    pub fn cursor(&self) -> Result<Option<LogSeq>, Error> {
-        let cursor = self.store.lowest_cursor()?;
-
-        Ok(cursor)
+    pub fn chain_cursor(&self) -> Result<Option<ChainPoint>, Error> {
+        // TODO: iterate over all workers and find the lowest cursor
+        todo!()
     }
 
     pub async fn register_worker(
@@ -167,97 +223,53 @@ impl Runtime {
     ) -> Result<(), Error> {
         let component = wasmtime::component::Component::from_file(&self.engine, wasm_path)?;
 
-        let mut store = wasmtime::Store::new(
+        let mut wasm_store = wasmtime::Store::new(
             &self.engine,
             WorkerState {
                 worker_id: id.to_owned(),
-                router: self.router.clone(),
+                router: Router::new(),
                 ledger: self.ledger.clone(),
                 kv: self.kv.clone(),
                 submit: self.submit.clone(),
             },
         );
 
-        let instance = wit::Worker::instantiate_async(&mut store, &component, &self.linker).await?;
+        let instance =
+            wit::Worker::instantiate_async(&mut wasm_store, &component, &self.linker).await?;
 
         let config = serde_json::to_vec(&config).unwrap();
-        instance.call_init(&mut store, &config).await?;
+        instance.call_init(&mut wasm_store, &config).await?;
 
-        self.loaded
-            .lock()
-            .await
-            .insert(id.to_owned(), LoadedWorker { store, instance });
+        self.loaded.lock().await.insert(
+            id.to_owned(),
+            LoadedWorker {
+                wasm_store,
+                instance,
+            },
+        );
 
         Ok(())
     }
 
-    pub async fn dispatch_event(
-        &self,
-        worker: &str,
-        channel: u32,
-        event: &wit::Event,
-    ) -> Result<wit::Response, Error> {
+    pub async fn apply_block(&self, block: &MultiEraBlock<'_>) -> Result<(), Error> {
+        let log_seq = self.store.write_ahead(block)?;
+
         let mut lock = self.loaded.lock().await;
 
-        let worker = lock
-            .get_mut(worker)
-            .ok_or(Error::WorkerNotFound(worker.to_string()))?;
+        let mut atomic_update = self.store.start_atomic_update()?;
 
-        let result = worker
-            .instance
-            .call_handle(&mut worker.store, channel, event)
-            .await?;
-
-        let response = result.map_err(|err| Error::Handle(err.code, err.message))?;
-
-        Ok(response)
-    }
-
-    async fn fire_and_forget(
-        &self,
-        event: &wit::Event,
-        targets: HashSet<router::Target>,
-    ) -> Result<(), Error> {
-        for target in targets {
-            let result = self
-                .dispatch_event(&target.worker, target.channel, event)
-                .await;
-
-            match result {
-                Ok(wit::Response::Acknowledge) => {
-                    tracing::debug!(worker = target.worker, "worker acknowledge");
-                }
-                Ok(_) => {
-                    tracing::warn!(worker = target.worker, "worker returned unexpected data");
-                }
-                Err(Error::Handle(code, message)) => {
-                    tracing::warn!(code, message);
-                }
-                Err(e) => return Err(e),
-            }
+        for (_, worker) in lock.iter_mut() {
+            worker.apply_block(block, log_seq).await?;
+            atomic_update.set_worker_cursor(&worker.wasm_store.data().worker_id, log_seq)?;
         }
+
+        atomic_update.commit()?;
 
         Ok(())
     }
 
-    pub async fn apply_block(
-        &self,
-        block: &MultiEraBlock<'_>,
-        wal_seq: LogSeq,
-    ) -> Result<(), Error> {
-        for tx in block.txs() {
-            for utxo in tx.outputs() {
-                let targets = self.router.find_utxo_targets(&utxo)?;
-                let event = wit::Event::Utxo(utxo.encode());
-
-                self.fire_and_forget(&event, targets).await?;
-            }
-        }
-
-        Ok(())
-    }
-
-    pub fn undo_block(&self, block: &MultiEraBlock, wal_seq: LogSeq) -> Result<(), Error> {
+    // TODO: implement undo once we have "apply" working
+    pub async fn undo_block(&self, block: &MultiEraBlock<'_>) -> Result<(), Error> {
         Ok(())
     }
 
@@ -265,24 +277,23 @@ impl Runtime {
         &self,
         worker: &str,
         method: &str,
-        params: serde_json::Value,
-    ) -> Result<serde_json::Value, Error> {
-        let target = self.router.find_request_target(worker, method)?;
+        params: Vec<u8>,
+    ) -> Result<wit::Response, Error> {
+        let mut lock = self.loaded.lock().await;
 
-        let evt = wit::Event::Request(serde_json::to_vec(&params).unwrap());
+        let worker = lock
+            .get_mut(worker)
+            .ok_or(Error::WorkerNotFound(worker.to_string()))?;
 
-        let reply = self
-            .dispatch_event(&target.worker, target.channel, &evt)
-            .await?;
+        let channel = worker
+            .wasm_store
+            .data()
+            .router
+            .find_request_target(method)?;
 
-        let json = match reply {
-            wit::Response::Acknowledge => json!({}),
-            wit::Response::Json(x) => serde_json::from_slice(&x).unwrap(),
-            wit::Response::Cbor(x) => json!({ "cbor": x }),
-            wit::Response::PartialTx(x) => json!({ "tx": x }),
-        };
+        let evt = wit::Event::Request(params);
 
-        Ok(json)
+        worker.dispatch_event(channel, &evt).await
     }
 }
 
@@ -360,7 +371,6 @@ impl RuntimeBuilder {
 
         Ok(Runtime {
             loaded: Default::default(),
-            router: router::Router::new(),
             engine,
             linker,
             store,

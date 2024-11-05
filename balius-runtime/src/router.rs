@@ -5,7 +5,7 @@ use std::{
 
 use pallas::ledger::traverse::MultiEraOutput;
 
-use crate::wit::balius::app::driver::EventPattern;
+use crate::wit::balius::app::driver::{Event, EventPattern};
 
 type WorkerId = String;
 type ChannelId = u32;
@@ -14,19 +14,13 @@ type AddressBytes = Vec<u8>;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum MatchKey {
-    RequestMethod(WorkerId, Method),
+    RequestMethod(Method),
     UtxoAddress(AddressBytes),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Target {
-    pub channel: ChannelId,
-    pub worker: String,
-}
-
-fn infer_match_keys(worker: &str, pattern: &EventPattern) -> Vec<MatchKey> {
+fn infer_match_keys(pattern: &EventPattern) -> Vec<MatchKey> {
     match pattern {
-        EventPattern::Request(x) => vec![MatchKey::RequestMethod(worker.to_owned(), x.to_owned())],
+        EventPattern::Request(x) => vec![MatchKey::RequestMethod(x.to_owned())],
         EventPattern::Utxo(_) => todo!(),
         EventPattern::UtxoUndo(_) => todo!(),
         EventPattern::Timer(_) => todo!(),
@@ -34,42 +28,35 @@ fn infer_match_keys(worker: &str, pattern: &EventPattern) -> Vec<MatchKey> {
     }
 }
 
-type RouteMap = HashMap<MatchKey, HashSet<Target>>;
+type RouteMap = HashMap<MatchKey, HashSet<ChannelId>>;
 
 #[derive(Default, Clone)]
 pub struct Router {
-    routes: Arc<RwLock<RouteMap>>,
+    routes: RouteMap,
 }
 
 impl Router {
     pub fn new() -> Self {
-        Self {
-            routes: Arc::new(RwLock::new(Default::default())),
-        }
+        Default::default()
     }
 
-    pub fn register_channel(&mut self, worker: &str, channel: u32, pattern: &EventPattern) {
-        let keys = infer_match_keys(worker, pattern);
-        let mut routes = self.routes.write().unwrap();
+    pub fn register_channel(&mut self, channel: u32, pattern: &EventPattern) {
+        let keys = infer_match_keys(pattern);
 
         for key in keys {
-            let targets = routes.entry(key).or_default();
+            let targets = self.routes.entry(key).or_default();
 
-            targets.insert(Target {
-                worker: worker.to_string(),
-                channel,
-            });
+            targets.insert(channel);
         }
     }
 
     pub fn find_utxo_targets(
         &self,
         utxo: &MultiEraOutput,
-    ) -> Result<HashSet<Target>, super::Error> {
-        let routes = self.routes.read().unwrap();
-
+    ) -> Result<HashSet<ChannelId>, super::Error> {
         let key = MatchKey::UtxoAddress(utxo.address()?.to_vec());
-        let targets: HashSet<_> = routes
+        let targets: HashSet<_> = self
+            .routes
             .get(&key)
             .iter()
             .flat_map(|x| x.iter())
@@ -81,11 +68,10 @@ impl Router {
         Ok(targets)
     }
 
-    pub fn find_request_target(&self, worker: &str, method: &str) -> Result<Target, super::Error> {
-        let key = MatchKey::RequestMethod(worker.to_owned(), method.to_owned());
-        let routes = self.routes.read().unwrap();
+    pub fn find_request_target(&self, method: &str) -> Result<ChannelId, super::Error> {
+        let key = MatchKey::RequestMethod(method.to_owned());
 
-        let targets = routes.get(&key).ok_or(super::Error::NoTarget)?;
+        let targets = self.routes.get(&key).ok_or(super::Error::NoTarget)?;
 
         if targets.is_empty() {
             return Err(super::Error::NoTarget);
@@ -108,14 +94,14 @@ mod tests {
     #[test]
     fn test_request_channel() {
         let mut router = Router::new();
-        let worker = "test_worker";
+
         let method = "test_method";
         let channel = 1;
 
-        router.register_channel(worker, channel, &EventPattern::Request(method.to_string()));
+        router.register_channel(channel, &EventPattern::Request(method.to_string()));
 
-        let target = router.find_request_target(worker, method).unwrap();
-        assert_eq!(target.worker, worker);
-        assert_eq!(target.channel, channel);
+        let channel = router.find_request_target(method).unwrap();
+
+        assert_eq!(channel, channel);
     }
 }
