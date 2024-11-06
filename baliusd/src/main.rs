@@ -5,6 +5,7 @@ use miette::{Context as _, IntoDiagnostic as _};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_with::{serde_as, DisplayFromStr};
+use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 mod boilerplate;
@@ -32,6 +33,7 @@ pub struct WorkerConfig {
 pub struct Config {
     pub rpc: drivers::jsonrpc::Config,
     pub ledger: ledgers::u5c::Config,
+    pub chainsync: drivers::chainsync::Config,
     pub workers: Vec<WorkerConfig>,
     pub logging: LoggingConfig,
 }
@@ -88,10 +90,19 @@ async fn main() -> miette::Result<()> {
 
     let cancel = boilerplate::hook_exit_token();
 
-    balius_runtime::drivers::jsonrpc::serve(config.rpc, runtime, cancel)
-        .await
-        .into_diagnostic()
-        .context("serving json-rpc requests")?;
+    let jsonrpc_server = tokio::spawn(balius_runtime::drivers::jsonrpc::serve(
+        config.rpc,
+        runtime.clone(),
+        cancel.clone(),
+    ));
+
+    let chainsync_driver = tokio::spawn(drivers::chainsync::run(
+        config.chainsync,
+        runtime.clone(),
+        cancel.clone(),
+    ));
+
+    let tasks = tokio::try_join!(jsonrpc_server, chainsync_driver);
 
     Ok(())
 }

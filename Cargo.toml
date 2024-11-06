@@ -7,7 +7,9 @@ members = [
     # "examples/sundae-stop-loss-strategy",
     # "examples/ticket-vending-machine",
     "examples/minter/offchain",
+    "examples/wallet/offchain",
     "balius-sdk",
     "balius-runtime",
-    "balius-macros", "baliusd",
+    "balius-macros",
+    "baliusd",
 ]

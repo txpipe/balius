@@ -9,7 +9,16 @@ include_tokio = true
 endpoint_url = "https://mainnet.utxorpc-v0.demeter.run"
 api_key = "dmtr_utxorpc1wgnnj0qcfj32zxsz2uc8d4g7uclm2s2w"
 
+[chainsync]
+endpoint_url = "https://mainnet.utxorpc-v0.demeter.run"
+api_key = "dmtr_utxorpc1wgnnj0qcfj32zxsz2uc8d4g7uclm2s2w"
+
 [[workers]]
 name = "faucet"
 module = "faucet.wasm"
 config = "faucet.json"
+
+[[workers]]
+name = "wallet"
+module = "wallet.wasm"
+config = "wallet.json"

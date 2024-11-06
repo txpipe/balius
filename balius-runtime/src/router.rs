@@ -5,7 +5,7 @@ use std::{
 
 use pallas::ledger::traverse::MultiEraOutput;
 
-use crate::wit::balius::app::driver::{Event, EventPattern};
+use crate::wit::balius::app::driver::{Event, EventPattern, UtxoPattern};
 
 type WorkerId = String;
 type ChannelId = u32;
@@ -15,13 +15,18 @@ type AddressBytes = Vec<u8>;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum MatchKey {
     RequestMethod(Method),
+    EveryUtxo,
     UtxoAddress(AddressBytes),
 }
 
 fn infer_match_keys(pattern: &EventPattern) -> Vec<MatchKey> {
     match pattern {
         EventPattern::Request(x) => vec![MatchKey::RequestMethod(x.to_owned())],
-        EventPattern::Utxo(_) => todo!(),
+        EventPattern::Utxo(UtxoPattern { address, token }) => match (address, token) {
+            (None, None) => vec![MatchKey::EveryUtxo],
+            (Some(address), None) => vec![MatchKey::UtxoAddress(address.to_vec())],
+            _ => todo!(),
+        },
         EventPattern::UtxoUndo(_) => todo!(),
         EventPattern::Timer(_) => todo!(),
         EventPattern::Message(_) => todo!(),
