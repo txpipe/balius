@@ -1,13 +1,23 @@
 use std::marker::PhantomData;
 
+use thiserror::Error;
+
 use crate::_internal::Handler;
 use crate::wit;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
+    #[error("internal error: {0}")]
     Internal(String),
+    #[error("bad config")]
     BadConfig,
+    #[error("bad params")]
     BadParams,
+    #[error("bad utxo")]
+    BadUtxo,
+    #[error("event mismatch, expected {0}")]
+    EventMismatch(String),
+    #[error("ledger error: {0}")]
     Ledger(wit::balius::app::ledger::LedgerError),
 }
 
@@ -29,6 +39,14 @@ impl From<Error> for wit::HandleError {
             Error::Ledger(err) => wit::HandleError {
                 code: 4,
                 message: err.to_string(),
+            },
+            Error::BadUtxo => wit::HandleError {
+                code: 5,
+                message: "bad utxo".to_owned(),
+            },
+            Error::EventMismatch(x) => wit::HandleError {
+                code: 6,
+                message: format!("event mismatch, expected {}", x),
             },
         }
     }
@@ -96,6 +114,16 @@ where
             func,
             phantom: PhantomData,
         }
+    }
+}
+
+pub struct Ack;
+
+impl TryFrom<Ack> for wit::Response {
+    type Error = Error;
+
+    fn try_from(_: Ack) -> Result<Self, Self::Error> {
+        Ok(wit::Response::Acknowledge)
     }
 }
 
@@ -179,6 +207,30 @@ impl<T> std::ops::Deref for Json<T> {
     }
 }
 
+pub struct Utxo<D> {
+    pub utxo: pallas_traverse::MultiEraOutput<'static>,
+    pub datum: Option<D>,
+}
+
+impl<D> TryFrom<wit::Event> for Utxo<D> {
+    type Error = Error;
+
+    fn try_from(value: wit::Event) -> Result<Self, Self::Error> {
+        let bytes = match value {
+            wit::Event::Utxo(x) => x,
+            _ => return Err(Error::EventMismatch("utxo".to_owned())),
+        };
+
+        // TODO: remove this once we have a way to keep the bytes around
+        let bytes: &'static [u8] = bytes.leak();
+
+        let utxo = pallas_traverse::MultiEraOutput::decode(pallas_traverse::Era::Conway, bytes)
+            .map_err(|_| Self::Error::BadUtxo)?;
+
+        Ok(Utxo { utxo, datum: None })
+    }
+}
+
 pub struct NewTx(pub Box<dyn crate::txbuilder::TxExpr>);
 
 impl TryInto<wit::Response> for NewTx {
@@ -211,6 +263,22 @@ impl crate::_internal::Worker {
             crate::_internal::Channel {
                 handler: Box::new(handler),
                 pattern: wit::balius::app::driver::EventPattern::Request(method.to_owned()),
+            },
+        );
+
+        self
+    }
+
+    pub fn with_utxo_handler(
+        mut self,
+        pattern: wit::balius::app::driver::UtxoPattern,
+        handler: impl Handler + Send + Sync + 'static,
+    ) -> Self {
+        self.channels.insert(
+            self.channels.len() as u32,
+            crate::_internal::Channel {
+                handler: Box::new(handler),
+                pattern: wit::balius::app::driver::EventPattern::Utxo(pattern),
             },
         );
 

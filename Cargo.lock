@@ -3414,6 +3414,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "wallet"
+version = "0.1.0"
+dependencies = [
+ "balius-sdk",
+ "hex",
+ "pallas-codec 0.30.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "pallas-primitives 0.30.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "pallas-traverse 0.30.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde",
+ "serde_json",
+ "serde_with",
+]
+
+[[package]]
 name = "want"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

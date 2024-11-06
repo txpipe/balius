@@ -6,8 +6,11 @@ use std::{
     path::Path,
     sync::Arc,
 };
+use store::AtomicUpdate;
 use thiserror::Error;
 use tokio::sync::Mutex;
+use tracing::{debug, info, warn};
+use utxorpc::ChainBlock;
 
 mod wit {
     wasmtime::component::bindgen!({
@@ -29,6 +32,8 @@ pub mod submit;
 pub use store::Store;
 
 pub type WorkerId = String;
+// pub type Block = utxorpc::ChainBlock<utxorpc::spec::cardano::Block>;
+pub type Block<'a> = pallas::ledger::traverse::MultiEraBlock<'a>;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -138,6 +143,7 @@ impl wit::balius::app::driver::Host for WorkerState {
 struct LoadedWorker {
     wasm_store: wasmtime::Store<WorkerState>,
     instance: wit::Worker,
+    cursor: Option<LogSeq>,
 }
 
 impl LoadedWorker {
@@ -171,11 +177,7 @@ impl LoadedWorker {
         Ok(())
     }
 
-    async fn apply_block(
-        &mut self,
-        block: &MultiEraBlock<'_>,
-        log_seq: LogSeq,
-    ) -> Result<(), Error> {
+    async fn apply_block(&mut self, block: &Block<'_>) -> Result<(), Error> {
         for tx in block.txs() {
             for (_, utxo) in tx.produces() {
                 let event = wit::Event::Utxo(utxo.encode());
@@ -210,9 +212,22 @@ impl Runtime {
         RuntimeBuilder::new(store)
     }
 
-    pub fn chain_cursor(&self) -> Result<Option<ChainPoint>, Error> {
-        // TODO: iterate over all workers and find the lowest cursor
-        todo!()
+    pub async fn chain_cursor(&self) -> Result<Option<ChainPoint>, Error> {
+        let lowest_seq = self
+            .loaded
+            .lock()
+            .await
+            .values()
+            .map(|w| w.cursor)
+            .flatten()
+            .min();
+
+        if let Some(seq) = lowest_seq {
+            //TODO: map seq to chain point by searching the wal
+            warn!(seq, "TODO: map seq to chain point by searching the wal");
+        }
+
+        Ok(None)
     }
 
     pub async fn register_worker(
@@ -240,27 +255,33 @@ impl Runtime {
         let config = serde_json::to_vec(&config).unwrap();
         instance.call_init(&mut wasm_store, &config).await?;
 
+        let cursor = self.store.get_worker_cursor(id)?;
+        debug!(cursor, id, "found cursor for worker");
+
         self.loaded.lock().await.insert(
             id.to_owned(),
             LoadedWorker {
                 wasm_store,
                 instance,
+                cursor,
             },
         );
 
         Ok(())
     }
 
-    pub async fn apply_block(&self, block: &MultiEraBlock<'_>) -> Result<(), Error> {
+    pub async fn apply_block(&self, block: &Block<'_>) -> Result<(), Error> {
+        info!(slot = block.slot(), "applying block");
+
         let log_seq = self.store.write_ahead(block)?;
 
         let mut lock = self.loaded.lock().await;
 
-        let mut atomic_update = self.store.start_atomic_update()?;
+        let mut atomic_update = self.store.start_atomic_update(log_seq)?;
 
         for (_, worker) in lock.iter_mut() {
-            worker.apply_block(block, log_seq).await?;
-            atomic_update.set_worker_cursor(&worker.wasm_store.data().worker_id, log_seq)?;
+            worker.apply_block(block).await?;
+            atomic_update.update_worker_cursor(&worker.wasm_store.data().worker_id)?;
         }
 
         atomic_update.commit()?;
@@ -269,7 +290,7 @@ impl Runtime {
     }
 
     // TODO: implement undo once we have "apply" working
-    pub async fn undo_block(&self, block: &MultiEraBlock<'_>) -> Result<(), Error> {
+    pub async fn undo_block(&self, block: &Block<'_>) -> Result<(), Error> {
         Ok(())
     }
 
