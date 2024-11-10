@@ -1,15 +1,11 @@
 use crate::wit::balius::app::ledger as wit;
 
 pub mod mock;
-
-#[cfg(feature = "utxorpc")]
 pub mod u5c;
 
 #[derive(Clone)]
 pub enum Ledger {
     Mock(mock::Ledger),
-
-    #[cfg(feature = "utxorpc")]
     U5C(u5c::Ledger),
 }
 
@@ -19,7 +15,6 @@ impl From<mock::Ledger> for Ledger {
     }
 }
 
-#[cfg(feature = "utxorpc")]
 impl From<u5c::Ledger> for Ledger {
     fn from(ledger: u5c::Ledger) -> Self {
         Ledger::U5C(ledger)
@@ -34,8 +29,6 @@ impl wit::Host for Ledger {
     ) -> Result<Vec<wit::Utxo>, wit::LedgerError> {
         match self {
             Ledger::Mock(ledger) => ledger.read_utxos(refs).await,
-
-            #[cfg(feature = "utxorpc")]
             Ledger::U5C(ledger) => ledger.read_utxos(refs).await,
         }
     }
@@ -48,8 +41,6 @@ impl wit::Host for Ledger {
     ) -> Result<wit::UtxoPage, wit::LedgerError> {
         match self {
             Ledger::Mock(ledger) => ledger.search_utxos(pattern, start, max_items).await,
-
-            #[cfg(feature = "utxorpc")]
             Ledger::U5C(ledger) => ledger.search_utxos(pattern, start, max_items).await,
         }
     }

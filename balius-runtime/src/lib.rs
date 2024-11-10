@@ -1,16 +1,9 @@
-use pallas::ledger::traverse::MultiEraBlock;
 use router::Router;
-use serde_json::json;
-use std::{
-    collections::{HashMap, HashSet},
-    path::Path,
-    sync::Arc,
-};
-use store::AtomicUpdate;
+use std::{collections::HashMap, path::Path, sync::Arc};
 use thiserror::Error;
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
-use utxorpc::ChainBlock;
+use utxorpc::spec::sync::BlockRef;
 
 mod wit {
     wasmtime::component::bindgen!({
@@ -32,8 +25,6 @@ pub mod submit;
 pub use store::Store;
 
 pub type WorkerId = String;
-// pub type Block = utxorpc::ChainBlock<utxorpc::spec::cardano::Block>;
-pub type Block<'a> = pallas::ledger::traverse::MultiEraBlock<'a>;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -63,6 +54,9 @@ pub enum Error {
 
     #[error("config error: {0}")]
     Config(String),
+
+    #[error("driver error: {0}")]
+    Driver(String),
 }
 
 impl From<wasmtime::Error> for Error {
@@ -116,10 +110,82 @@ impl From<pallas::ledger::addresses::Error> for Error {
 pub type BlockSlot = u64;
 pub type BlockHash = pallas::crypto::hash::Hash<32>;
 
-#[derive(Debug, Eq, PartialEq, Hash)]
-pub struct ChainPoint(pub BlockSlot, pub BlockHash);
+pub enum ChainPoint {
+    Cardano(utxorpc::spec::sync::BlockRef),
+}
 
 pub type LogSeq = u64;
+
+pub enum Utxo {
+    Cardano(utxorpc::spec::cardano::TxOutput),
+}
+
+impl Utxo {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        use prost::Message;
+
+        match self {
+            Self::Cardano(utxo) => utxo.encode_to_vec(),
+        }
+    }
+}
+
+pub enum Tx {
+    Cardano(utxorpc::spec::cardano::Tx),
+}
+
+impl Tx {
+    pub fn outputs(&self) -> Vec<Utxo> {
+        match self {
+            Self::Cardano(tx) => tx
+                .outputs
+                .iter()
+                .map(|o| Utxo::Cardano(o.clone()))
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Block {
+    Cardano(utxorpc::spec::cardano::Block),
+}
+
+impl Block {
+    pub fn txs(&self) -> Vec<Tx> {
+        match self {
+            Self::Cardano(block) => block
+                .body
+                .iter()
+                .flat_map(|b| b.tx.iter())
+                .map(|t| Tx::Cardano(t.clone()))
+                .collect(),
+        }
+    }
+
+    pub fn chain_point(&self) -> ChainPoint {
+        match self {
+            Self::Cardano(block) => ChainPoint::Cardano(BlockRef {
+                index: block.header.as_ref().unwrap().slot,
+                hash: block.header.as_ref().unwrap().hash.clone(),
+            }),
+        }
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        use prost::Message;
+
+        match self {
+            Self::Cardano(block) => block.encode_to_vec(),
+        }
+    }
+
+    pub fn from_bytes(data: &[u8]) -> Self {
+        use prost::Message;
+
+        Self::Cardano(utxorpc::spec::cardano::Block::decode(data).unwrap())
+    }
+}
 
 struct WorkerState {
     pub worker_id: String,
@@ -177,11 +243,28 @@ impl LoadedWorker {
         Ok(())
     }
 
-    async fn apply_block(&mut self, block: &Block<'_>) -> Result<(), Error> {
+    async fn apply_block(&mut self, block: &Block) -> Result<(), Error> {
         for tx in block.txs() {
-            for (_, utxo) in tx.produces() {
-                let event = wit::Event::Utxo(utxo.encode());
+            for utxo in tx.outputs() {
                 let channels = self.wasm_store.data().router.find_utxo_targets(&utxo)?;
+
+                let event = wit::Event::Utxo(utxo.to_bytes());
+
+                for channel in channels {
+                    self.acknowledge_event(channel, &event).await?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn undo_block(&mut self, block: &Block) -> Result<(), Error> {
+        for tx in block.txs() {
+            for utxo in tx.outputs() {
+                let channels = self.wasm_store.data().router.find_utxo_targets(&utxo)?;
+
+                let event = wit::Event::UtxoUndo(utxo.to_bytes());
 
                 for channel in channels {
                     self.acknowledge_event(channel, &event).await?;
@@ -223,8 +306,11 @@ impl Runtime {
             .min();
 
         if let Some(seq) = lowest_seq {
-            //TODO: map seq to chain point by searching the wal
-            warn!(seq, "TODO: map seq to chain point by searching the wal");
+            debug!(lowest_seq, "found lowest seq");
+
+            let entry = self.store.get_entry(seq)?;
+            let block = Block::from_bytes(&entry.unwrap().next_block);
+            return Ok(Some(block.chain_point()));
         }
 
         Ok(None)
@@ -270,27 +356,31 @@ impl Runtime {
         Ok(())
     }
 
-    pub async fn apply_block(&self, block: &Block<'_>) -> Result<(), Error> {
-        info!(slot = block.slot(), "applying block");
+    pub async fn handle_chain(
+        &mut self,
+        undo_blocks: &Vec<Block>,
+        next_block: &Block,
+    ) -> Result<(), Error> {
+        info!("applying block");
 
-        let log_seq = self.store.write_ahead(block)?;
+        let log_seq = self.store.write_ahead(undo_blocks, next_block)?;
 
         let mut lock = self.loaded.lock().await;
 
         let mut atomic_update = self.store.start_atomic_update(log_seq)?;
 
         for (_, worker) in lock.iter_mut() {
-            worker.apply_block(block).await?;
+            for undo_block in undo_blocks {
+                worker.undo_block(undo_block).await?;
+            }
+
+            worker.apply_block(next_block).await?;
+
             atomic_update.update_worker_cursor(&worker.wasm_store.data().worker_id)?;
         }
 
         atomic_update.commit()?;
 
-        Ok(())
-    }
-
-    // TODO: implement undo once we have "apply" working
-    pub async fn undo_block(&self, block: &Block<'_>) -> Result<(), Error> {
         Ok(())
     }
 

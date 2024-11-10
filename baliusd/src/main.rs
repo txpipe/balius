@@ -72,6 +72,7 @@ async fn main() -> miette::Result<()> {
 
     let mut runtime = Runtime::builder(store)
         .with_ledger(ledger.into())
+        .with_kv(balius_runtime::kv::Kv::Mock)
         .build()
         .into_diagnostic()
         .context("setting up runtime")?;
@@ -102,7 +103,10 @@ async fn main() -> miette::Result<()> {
         cancel.clone(),
     ));
 
-    let tasks = tokio::try_join!(jsonrpc_server, chainsync_driver);
+    let (jsonrpc, chainsync) = tokio::try_join!(jsonrpc_server, chainsync_driver).unwrap();
+
+    jsonrpc.unwrap();
+    chainsync.unwrap();
 
     Ok(())
 }

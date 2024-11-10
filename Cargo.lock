@@ -256,6 +256,7 @@ dependencies = [
  "hex",
  "itertools 0.13.0",
  "pallas",
+ "prost 0.12.6",
  "redb",
  "serde",
  "serde_json",

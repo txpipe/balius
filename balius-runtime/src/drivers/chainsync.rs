@@ -1,17 +1,16 @@
-use pallas::codec::minicbor::decode::info;
 use serde::{Deserialize, Serialize};
 use tokio::select;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 use utxorpc::CardanoSyncClient;
 
-use crate::{ChainPoint, Error, Runtime};
+use crate::{Block, ChainPoint, Error, Runtime};
 
 impl From<ChainPoint> for utxorpc::spec::sync::BlockRef {
     fn from(point: ChainPoint) -> Self {
-        utxorpc::spec::sync::BlockRef {
-            index: point.0,
-            hash: point.1.to_vec().into(),
+        match point {
+            ChainPoint::Cardano(x) => x.clone(),
+            _ => todo!(),
         }
     }
 }
@@ -22,10 +21,41 @@ pub struct Config {
     pub api_key: String,
 }
 
-pub async fn run(config: Config, runtime: Runtime, cancel: CancellationToken) -> Result<(), Error> {
+pub type UndoBlocks = Vec<Block>;
+pub type NextBlock = Block;
+
+/// Gather undo blocks from the tip until the next block is encountered.
+async fn gather_blocks(
+    tip: &mut utxorpc::LiveTip<utxorpc::Cardano>,
+) -> Result<(NextBlock, UndoBlocks), Error> {
+    let mut undos = vec![];
+
+    loop {
+        let event = tip.event().await?;
+
+        match event {
+            utxorpc::TipEvent::Apply(chain_block) => {
+                let next = Block::Cardano(chain_block.parsed.unwrap());
+                break Ok((next, undos));
+            }
+            utxorpc::TipEvent::Undo(chain_block) => {
+                undos.push(Block::Cardano(chain_block.parsed.unwrap()));
+            }
+            utxorpc::TipEvent::Reset(_) => unreachable!(),
+        }
+    }
+}
+
+pub async fn run(
+    config: Config,
+    mut runtime: Runtime,
+    cancel: CancellationToken,
+) -> Result<(), Error> {
     let mut sync = utxorpc::ClientBuilder::new()
-        .uri(&config.endpoint_url)?
-        .metadata("dmtr-api-key", config.api_key)?
+        .uri(&config.endpoint_url)
+        .map_err(|e| Error::Driver(e.to_string()))?
+        .metadata("dmtr-api-key", config.api_key)
+        .map_err(|e| Error::Driver(e.to_string()))?
         .build::<CardanoSyncClient>()
         .await;
 
@@ -36,34 +66,37 @@ pub async fn run(config: Config, runtime: Runtime, cancel: CancellationToken) ->
         .into_iter()
         .collect();
 
+    info!(cursor = ?cursor, "found runtime cursor");
+
     // TODO: handle disconnections and retry logic
 
-    let mut tip = sync.follow_tip(cursor).await?;
+    let mut tip = sync
+        .follow_tip(cursor)
+        .await
+        .map_err(|e| Error::Driver(e.to_string()))?;
+
+    // confirm first event is a reset to the requested chain point
+    match tip.event().await? {
+        utxorpc::TipEvent::Reset(point) => {
+            warn!(
+                slot = point.index,
+                "TODO: check that reset is to the requested chain point"
+            );
+        }
+        _ => return Err(Error::Driver("unexpected event".to_string())),
+    }
 
     info!("starting follow-tip loop");
 
     loop {
         select! {
             _ = cancel.cancelled() => {
-                warn!("chainsync driver cancelled");
+                warn!("chain-sync driver cancelled");
                 break Ok(())
             },
-            event = tip.event() => {
-                match event {
-                    Ok(utxorpc::TipEvent::Apply(block)) => {
-                        let block = pallas::ledger::traverse::MultiEraBlock::decode(&block.native).unwrap();
-                        runtime.apply_block(&block).await?;
-                    }
-                    Ok(utxorpc::TipEvent::Undo(block)) => {
-                        let block = pallas::ledger::traverse::MultiEraBlock::decode(&block.native).unwrap();
-                        runtime.undo_block(&block).await?;
-                    }
-                    Ok(utxorpc::TipEvent::Reset(point)) => {
-                        warn!(slot=point.index, "TODO: handle reset");
-                        continue;
-                    },
-                    Err(_) => todo!(),
-                }
+            batch = gather_blocks(&mut tip) => {
+                let (next, undos) = batch?;
+                runtime.handle_chain(&undos, &next).await?;
             }
         }
     }
