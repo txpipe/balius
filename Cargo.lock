@@ -174,7 +174,7 @@ dependencies = [
  "bytes",
  "futures-util",
  "http 0.2.12",
- "http-body",
+ "http-body 0.4.6",
  "hyper",
  "itoa",
  "matchit",
@@ -200,7 +200,7 @@ dependencies = [
  "bytes",
  "futures-util",
  "http 0.2.12",
- "http-body",
+ "http-body 0.4.6",
  "mime",
  "rustversion",
  "tower-layer",
@@ -281,10 +281,12 @@ dependencies = [
  "pallas-crypto 0.30.2 (git+https://github.com/txpipe/pallas.git)",
  "pallas-primitives 0.30.2 (git+https://github.com/txpipe/pallas.git)",
  "pallas-traverse 0.30.2 (git+https://github.com/txpipe/pallas.git)",
+ "prost 0.13.3",
  "serde",
  "serde_json",
  "serde_with",
  "thiserror",
+ "utxorpc-spec 0.11.0",
  "wit-bindgen",
 ]
 
@@ -1264,6 +1266,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "http-body"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1efedce1fb8e6913f23e0c92de8e62cd5b772a67e7b3946df930a62566c93184"
+dependencies = [
+ "bytes",
+ "http 1.1.0",
+]
+
+[[package]]
+name = "http-body-util"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "793429d76616a256bcb62c2a2ec2bed781c8307e797e2598c50010f2bee2544f"
+dependencies = [
+ "bytes",
+ "futures-util",
+ "http 1.1.0",
+ "http-body 1.0.1",
+ "pin-project-lite",
+]
+
+[[package]]
 name = "httparse"
 version = "1.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1287,7 +1312,7 @@ dependencies = [
  "futures-util",
  "h2",
  "http 0.2.12",
- "http-body",
+ "http-body 0.4.6",
  "httparse",
  "httpdate",
  "itoa",
@@ -2031,7 +2056,7 @@ dependencies = [
  "pallas-primitives 0.30.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "pallas-traverse 0.30.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "prost-types 0.13.3",
- "utxorpc-spec",
+ "utxorpc-spec 0.10.0",
 ]
 
 [[package]]
@@ -2072,6 +2097,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pbjson"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7e6349fa080353f4a597daffd05cb81572a9c031a6d4fff7e504947496fcc68"
+dependencies = [
+ "base64 0.21.7",
+ "serde",
+]
+
+[[package]]
 name = "pbjson-build"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2084,6 +2119,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "pbjson-build"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6eea3058763d6e656105d1403cb04e0a41b7bbac6362d413e7c33be0c32279c9"
+dependencies = [
+ "heck 0.5.0",
+ "itertools 0.13.0",
+ "prost 0.13.3",
+ "prost-types 0.13.3",
+]
+
+[[package]]
 name = "pbjson-types"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2091,10 +2138,25 @@ checksum = "18f596653ba4ac51bdecbb4ef6773bc7f56042dc13927910de1684ad3d32aa12"
 dependencies = [
  "bytes",
  "chrono",
- "pbjson",
- "pbjson-build",
+ "pbjson 0.6.0",
+ "pbjson-build 0.6.2",
  "prost 0.12.6",
- "prost-build",
+ "prost-build 0.12.6",
+ "serde",
+]
+
+[[package]]
+name = "pbjson-types"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e54e5e7bfb1652f95bc361d76f3c780d8e526b134b85417e774166ee941f0887"
+dependencies = [
+ "bytes",
+ "chrono",
+ "pbjson 0.7.0",
+ "pbjson-build 0.7.0",
+ "prost 0.13.3",
+ "prost-build 0.13.3",
  "serde",
 ]
 
@@ -2234,6 +2296,27 @@ dependencies = [
  "prettyplease",
  "prost 0.12.6",
  "prost-types 0.12.6",
+ "regex",
+ "syn 2.0.85",
+ "tempfile",
+]
+
+[[package]]
+name = "prost-build"
+version = "0.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c1318b19085f08681016926435853bbf7858f9c082d0999b80550ff5d9abe15"
+dependencies = [
+ "bytes",
+ "heck 0.5.0",
+ "itertools 0.13.0",
+ "log",
+ "multimap",
+ "once_cell",
+ "petgraph",
+ "prettyplease",
+ "prost 0.13.3",
+ "prost-types 0.13.3",
  "regex",
  "syn 2.0.85",
  "tempfile",
@@ -3140,7 +3223,7 @@ dependencies = [
  "bytes",
  "h2",
  "http 0.2.12",
- "http-body",
+ "http-body 0.4.6",
  "hyper",
  "hyper-timeout",
  "percent-encoding",
@@ -3153,6 +3236,27 @@ dependencies = [
  "tokio-rustls",
  "tokio-stream",
  "tower",
+ "tower-layer",
+ "tower-service",
+ "tracing",
+]
+
+[[package]]
+name = "tonic"
+version = "0.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "877c5b330756d856ffcc4553ab34a5684481ade925ecc54bcd1bf02b1d0d4d52"
+dependencies = [
+ "async-trait",
+ "base64 0.22.1",
+ "bytes",
+ "http 1.1.0",
+ "http-body 1.0.1",
+ "http-body-util",
+ "percent-encoding",
+ "pin-project",
+ "prost 0.13.3",
+ "tokio-stream",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -3365,8 +3469,8 @@ dependencies = [
  "bytes",
  "thiserror",
  "tokio",
- "tonic",
- "utxorpc-spec",
+ "tonic 0.11.0",
+ "utxorpc-spec 0.10.0",
 ]
 
 [[package]]
@@ -3377,11 +3481,26 @@ checksum = "343c17df63049cee293d3262cb741d1c97dc0c73f080336132b16d48f264b885"
 dependencies = [
  "bytes",
  "futures-core",
- "pbjson",
- "pbjson-types",
+ "pbjson 0.6.0",
+ "pbjson-types 0.6.0",
  "prost 0.12.6",
  "serde",
- "tonic",
+ "tonic 0.11.0",
+]
+
+[[package]]
+name = "utxorpc-spec"
+version = "0.11.0"
+source = "git+https://github.com/utxorpc/spec.git#dea9af6cb3d0be80c044ad5e9817c2d07e7e71ec"
+dependencies = [
+ "bytes",
+ "futures-core",
+ "pbjson 0.7.0",
+ "pbjson-types 0.7.0",
+ "prost 0.13.3",
+ "prost-types 0.13.3",
+ "serde",
+ "tonic 0.12.3",
 ]
 
 [[package]]

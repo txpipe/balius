@@ -208,7 +208,7 @@ impl<T> std::ops::Deref for Json<T> {
 }
 
 pub struct Utxo<D> {
-    pub utxo: pallas_traverse::MultiEraOutput<'static>,
+    pub utxo: utxorpc_spec::utxorpc::v1alpha::cardano::TxOutput,
     pub datum: Option<D>,
 }
 
@@ -216,16 +216,15 @@ impl<D> TryFrom<wit::Event> for Utxo<D> {
     type Error = Error;
 
     fn try_from(value: wit::Event) -> Result<Self, Self::Error> {
+        use prost::Message;
+
         let bytes = match value {
             wit::Event::Utxo(x) => x,
-            _ => return Err(Error::EventMismatch("utxo".to_owned())),
+            wit::Event::UtxoUndo(x) => x,
+            _ => return Err(Error::EventMismatch("utxo|utxoundo".to_owned())),
         };
 
-        // TODO: remove this once we have a way to keep the bytes around
-        let bytes: &'static [u8] = bytes.leak();
-
-        let utxo = pallas_traverse::MultiEraOutput::decode(pallas_traverse::Era::Conway, bytes)
-            .map_err(|_| Self::Error::BadUtxo)?;
+        let utxo = Message::decode(bytes.as_slice()).map_err(|_| Self::Error::BadUtxo)?;
 
         Ok(Utxo { utxo, datum: None })
     }
