@@ -374,16 +374,16 @@ impl Runtime {
 
         let log_seq = self.store.write_ahead(undo_blocks, next_block)?;
 
-        let mut lock = self.loaded.lock().await;
+        let mut workers = self.loaded.lock().await;
 
-        let mut atomic_update = self.store.start_atomic_update(log_seq)?;
+        let mut store_update = self.store.start_atomic_update(log_seq)?;
 
-        for (_, worker) in lock.iter_mut() {
+        for (_, worker) in workers.iter_mut() {
             worker.apply_chain(undo_blocks, next_block).await?;
-            atomic_update.update_worker_cursor(&worker.wasm_store.data().worker_id)?;
+            store_update.update_worker_cursor(&worker.wasm_store.data().worker_id)?;
         }
 
-        atomic_update.commit()?;
+        store_update.commit()?;
 
         Ok(())
     }

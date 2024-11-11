@@ -18,9 +18,10 @@ tracing = "0.1.40"
 hex = "0.4.3"
 itertools = "0.13.0"
 async-trait = "0.1.83"
-utxorpc = { version = "0.7.1" }
+utxorpc = { version = "0.8.0" }
+# utxorpc = { path = "../../../utxorpc/rust-sdk" }
 tokio-util = "0.7.12"
-prost = "0.12.6"
+prost = "0.13"
 
 [dev-dependencies]
 tokio = "1.40.0"
