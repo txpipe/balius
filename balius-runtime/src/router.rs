@@ -1,11 +1,9 @@
-use std::{
-    collections::{HashMap, HashSet},
-    sync::{Arc, RwLock},
+use std::collections::{HashMap, HashSet};
+
+use crate::{
+    wit::balius::app::driver::{EventPattern, UtxoPattern},
+    Utxo,
 };
-
-use pallas::ledger::traverse::MultiEraOutput;
-
-use crate::wit::balius::app::driver::{Event, EventPattern, UtxoPattern};
 
 type WorkerId = String;
 type ChannelId = u32;
@@ -55,11 +53,9 @@ impl Router {
         }
     }
 
-    pub fn find_utxo_targets(
-        &self,
-        utxo: &MultiEraOutput,
-    ) -> Result<HashSet<ChannelId>, super::Error> {
-        let key = MatchKey::UtxoAddress(utxo.address()?.to_vec());
+    pub fn find_utxo_targets(&self, utxo: &Utxo) -> Result<HashSet<ChannelId>, super::Error> {
+        let key = MatchKey::EveryUtxo;
+
         let targets: HashSet<_> = self
             .routes
             .get(&key)
@@ -68,7 +64,7 @@ impl Router {
             .cloned()
             .collect();
 
-        // TODO: match by policy / asset
+        // TODO: match by address / policy / asset
 
         Ok(targets)
     }

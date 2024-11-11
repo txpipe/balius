@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+utxorpc-spec = { version = "0.12.0", features = ["ledgers"], default-features = false }
 balius-macros = { version = "0.1.0", path = "../balius-macros" }
 hex = "0.4.3"
 pallas-addresses = { version = "0.30.2", git = "https://github.com/txpipe/pallas.git" }
@@ -11,6 +12,7 @@ pallas-codec = { version = "0.30.2", git = "https://github.com/txpipe/pallas.git
 pallas-crypto = { version = "0.30.2", git = "https://github.com/txpipe/pallas.git" }
 pallas-primitives = { version = "0.30.2", git = "https://github.com/txpipe/pallas.git" }
 pallas-traverse = { version = "0.30.2", git = "https://github.com/txpipe/pallas.git" }
+prost = "0.13.3"
 serde = { version = "1.0.210", features = ["derive"] }
 serde_json = "1.0.128"
 serde_with = "3.9.0"

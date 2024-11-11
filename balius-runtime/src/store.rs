@@ -1,17 +1,59 @@
-use std::{path::Path, sync::Arc};
-
 use itertools::Itertools;
+use prost::Message;
 use redb::{ReadableTable as _, TableDefinition, WriteTransaction};
+use std::{path::Path, sync::Arc};
 use tracing::warn;
 
-use crate::Error;
+use crate::{Block, ChainPoint, Error};
 
 pub type WorkerId = String;
 pub type LogSeq = u64;
-// pub type Block = utxorpc::ChainBlock<utxorpc::spec::cardano::Block>;
-pub type Block<'a> = pallas::ledger::traverse::MultiEraBlock<'a>;
+
+#[derive(Message)]
+pub struct LogEntry {
+    #[prost(bytes, tag = "1")]
+    pub next_block: Vec<u8>,
+    #[prost(bytes, repeated, tag = "2")]
+    pub undo_blocks: Vec<Vec<u8>>,
+}
+
+impl redb::Value for LogEntry {
+    type SelfType<'a>
+        = LogEntry
+    where
+        Self: 'a;
+
+    type AsBytes<'a>
+        = Vec<u8>
+    where
+        Self: 'a;
+
+    fn fixed_width() -> Option<usize> {
+        None
+    }
+
+    fn from_bytes<'a>(data: &'a [u8]) -> Self::SelfType<'a>
+    where
+        Self: 'a,
+    {
+        prost::Message::decode(data).unwrap()
+    }
+
+    fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
+    where
+        Self: 'a,
+        Self: 'b,
+    {
+        value.encode_to_vec()
+    }
+
+    fn type_name() -> redb::TypeName {
+        redb::TypeName::new("LogEntry")
+    }
+}
 
 const CURSORS: TableDefinition<WorkerId, LogSeq> = TableDefinition::new("cursors");
+const WAL: TableDefinition<LogSeq, LogEntry> = TableDefinition::new("wal");
 
 const DEFAULT_CACHE_SIZE_MB: usize = 50;
 
@@ -37,6 +79,7 @@ impl AtomicUpdate {
 #[derive(Clone)]
 pub struct Store {
     db: Arc<redb::Database>,
+    log_seq: LogSeq,
 }
 
 impl Store {
@@ -48,16 +91,63 @@ impl Store {
             .set_cache_size(1024 * 1024 * cache_size.unwrap_or(DEFAULT_CACHE_SIZE_MB))
             .create(path)?;
 
+        let log_seq = Self::load_log_seq(&inner)?.unwrap_or_default();
+
         let out = Self {
             db: Arc::new(inner),
+            log_seq,
         };
 
         Ok(out)
     }
 
-    pub fn write_ahead(&self, block: &Block<'_>) -> Result<LogSeq, Error> {
-        // TODO: write event to WAL table and return log sequence
-        Ok(0)
+    fn load_log_seq(db: &redb::Database) -> Result<Option<LogSeq>, Error> {
+        let rx = db.begin_read()?;
+
+        match rx.open_table(WAL) {
+            Ok(table) => {
+                let last = table.last()?;
+                Ok(last.map(|(k, _)| k.value()))
+            }
+            Err(redb::TableError::TableDoesNotExist(_)) => Ok(None),
+            Err(e) => return Err(e.into()),
+        }
+    }
+
+    fn get_entry(&self, seq: LogSeq) -> Result<Option<LogEntry>, Error> {
+        let rx = self.db.begin_read()?;
+        let table = rx.open_table(WAL)?;
+        let entry = table.get(seq)?;
+        Ok(entry.map(|x| x.value()))
+    }
+
+    pub fn find_chain_point(&self, seq: LogSeq) -> Result<Option<ChainPoint>, Error> {
+        let entry = self.get_entry(seq)?;
+        let block = Block::from_bytes(&entry.unwrap().next_block);
+
+        Ok(Some(block.chain_point()))
+    }
+
+    pub fn write_ahead(
+        &mut self,
+        undo_blocks: &Vec<Block>,
+        next_block: &Block,
+    ) -> Result<LogSeq, Error> {
+        self.log_seq += 1;
+
+        let wx = self.db.begin_write()?;
+        {
+            wx.open_table(WAL)?.insert(
+                self.log_seq,
+                LogEntry {
+                    next_block: next_block.to_bytes(),
+                    undo_blocks: undo_blocks.iter().map(|x| x.to_bytes()).collect(),
+                },
+            )?;
+        }
+
+        wx.commit()?;
+        Ok(self.log_seq)
     }
 
     // TODO: see if loading in batch is worth it
