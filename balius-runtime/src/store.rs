@@ -4,7 +4,7 @@ use redb::{ReadableTable as _, TableDefinition, WriteTransaction};
 use std::{path::Path, sync::Arc};
 use tracing::warn;
 
-use crate::{Block, Error};
+use crate::{Block, ChainPoint, Error};
 
 pub type WorkerId = String;
 pub type LogSeq = u64;
@@ -114,11 +114,18 @@ impl Store {
         }
     }
 
-    pub fn get_entry(&self, seq: LogSeq) -> Result<Option<LogEntry>, Error> {
+    fn get_entry(&self, seq: LogSeq) -> Result<Option<LogEntry>, Error> {
         let rx = self.db.begin_read()?;
         let table = rx.open_table(WAL)?;
         let entry = table.get(seq)?;
         Ok(entry.map(|x| x.value()))
+    }
+
+    pub fn find_chain_point(&self, seq: LogSeq) -> Result<Option<ChainPoint>, Error> {
+        let entry = self.get_entry(seq)?;
+        let block = Block::from_bytes(&entry.unwrap().next_block);
+
+        Ok(Some(block.chain_point()))
     }
 
     pub fn write_ahead(

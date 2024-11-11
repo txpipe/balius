@@ -274,6 +274,18 @@ impl LoadedWorker {
 
         Ok(())
     }
+
+    async fn apply_chain(
+        &mut self,
+        undo_blocks: &Vec<Block>,
+        next_block: &Block,
+    ) -> Result<(), Error> {
+        for block in undo_blocks {
+            self.undo_block(block).await?;
+        }
+
+        self.apply_block(next_block).await
+    }
 }
 
 type WorkerMap = HashMap<String, LoadedWorker>;
@@ -307,10 +319,7 @@ impl Runtime {
 
         if let Some(seq) = lowest_seq {
             debug!(lowest_seq, "found lowest seq");
-
-            let entry = self.store.get_entry(seq)?;
-            let block = Block::from_bytes(&entry.unwrap().next_block);
-            return Ok(Some(block.chain_point()));
+            return self.store.find_chain_point(seq);
         }
 
         Ok(None)
@@ -370,12 +379,7 @@ impl Runtime {
         let mut atomic_update = self.store.start_atomic_update(log_seq)?;
 
         for (_, worker) in lock.iter_mut() {
-            for undo_block in undo_blocks {
-                worker.undo_block(undo_block).await?;
-            }
-
-            worker.apply_block(next_block).await?;
-
+            worker.apply_chain(undo_blocks, next_block).await?;
             atomic_update.update_worker_cursor(&worker.wasm_store.data().worker_id)?;
         }
 
