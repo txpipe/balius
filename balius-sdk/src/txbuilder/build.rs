@@ -59,7 +59,7 @@ where
     L: Ledger + 'static,
 {
     let mut ctx = BuildContext {
-        network: primitives::NetworkId::One,
+        network: primitives::NetworkId::Testnet,
         pparams: PParams {
             min_fee_a: 4,
             min_fee_b: 3,
