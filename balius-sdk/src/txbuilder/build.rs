@@ -65,7 +65,7 @@ where
             min_fee_b: 3,
             min_utxo_value: 2,
         },
-        estimated_fee: 1,
+        estimated_fee: 2_000_000,
         ledger: Box::new(ledger),
         tx_body: None,
     };
