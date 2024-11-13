@@ -1,5 +1,10 @@
+use std::ops::Deref as _;
+
+use pallas_traverse::MultiEraValue;
+
 use super::{
-    primitives, BuildContext, BuildError, Ledger, PParams, TxExpr, TxoRef, UtxoPattern, UtxoSet,
+    asset_math, primitives, BuildContext, BuildError, Ledger, PParams, TxExpr, TxoRef, UtxoPattern,
+    UtxoSet,
 };
 
 impl BuildContext {
@@ -65,13 +70,34 @@ where
             min_fee_b: 3,
             min_utxo_value: 2,
         },
-        estimated_fee: 2_000_000,
+        total_input: primitives::Value::Coin(0),
+        spent_output: primitives::Value::Coin(0),
+        estimated_fee: 0,
         ledger: Box::new(ledger),
         tx_body: None,
     };
 
+    // Build the raw transaction, so we have the info needed to estimate fees and
+    // compute change.
     let body = tx.eval_body(&ctx)?;
 
+    let input_refs: Vec<_> = body
+        .inputs
+        .iter()
+        .map(|i| TxoRef {
+            hash: i.transaction_id,
+            index: i.index,
+        })
+        .collect();
+    let utxos = ctx.ledger.read_utxos(&input_refs)?;
+    ctx.total_input =
+        asset_math::aggregate_values(utxos.txos().map(|txo| input_into_conway(&txo.value())));
+    ctx.spent_output = asset_math::aggregate_values(body.outputs.iter().map(output_into_conway));
+    // TODO: estimate the fee
+    ctx.estimated_fee = 2_000_000;
+
+    // Now that we know the inputs/outputs/fee, build the "final" (unsigned)tx
+    let body = tx.eval_body(&ctx)?;
     ctx.tx_body = Some(body);
 
     let wit = tx.eval_witness_set(&ctx).unwrap();
@@ -84,4 +110,63 @@ where
     };
 
     Ok(tx)
+}
+
+// TODO: this belongs in pallas-traverse
+// https://github.com/txpipe/pallas/pull/545
+fn input_into_conway(value: &MultiEraValue) -> primitives::Value {
+    use pallas_primitives::{alonzo, conway};
+    match value {
+        MultiEraValue::Byron(x) => conway::Value::Coin(*x),
+        MultiEraValue::AlonzoCompatible(x) => match x.deref() {
+            alonzo::Value::Coin(x) => conway::Value::Coin(*x),
+            alonzo::Value::Multiasset(x, assets) => {
+                let coin = *x;
+                let assets = assets
+                    .iter()
+                    .filter_map(|(k, v)| {
+                        let v: Vec<(conway::Bytes, conway::PositiveCoin)> = v
+                            .iter()
+                            .filter_map(|(k, v)| Some((k.clone(), (*v).try_into().ok()?)))
+                            .collect();
+                        Some((k.clone(), conway::NonEmptyKeyValuePairs::from_vec(v)?))
+                    })
+                    .collect();
+                if let Some(assets) = conway::NonEmptyKeyValuePairs::from_vec(assets) {
+                    conway::Value::Multiasset(coin, assets)
+                } else {
+                    conway::Value::Coin(coin)
+                }
+            }
+        },
+        MultiEraValue::Conway(x) => x.deref().clone(),
+        _ => panic!("unrecognized value"),
+    }
+}
+
+fn output_into_conway(output: &primitives::TransactionOutput) -> primitives::Value {
+    use pallas_primitives::{alonzo, conway};
+    match output {
+        primitives::TransactionOutput::Legacy(o) => match &o.amount {
+            alonzo::Value::Coin(c) => primitives::Value::Coin(*c),
+            alonzo::Value::Multiasset(c, assets) => {
+                let assets = assets
+                    .iter()
+                    .filter_map(|(k, v)| {
+                        let v: Vec<(conway::Bytes, conway::PositiveCoin)> = v
+                            .iter()
+                            .filter_map(|(k, v)| Some((k.clone(), (*v).try_into().ok()?)))
+                            .collect();
+                        Some((k.clone(), conway::NonEmptyKeyValuePairs::from_vec(v)?))
+                    })
+                    .collect();
+                if let Some(assets) = conway::NonEmptyKeyValuePairs::from_vec(assets) {
+                    primitives::Value::Multiasset(*c, assets)
+                } else {
+                    primitives::Value::Coin(*c)
+                }
+            }
+        },
+        primitives::TransactionOutput::PostAlonzo(o) => o.value.clone(),
+    }
 }
