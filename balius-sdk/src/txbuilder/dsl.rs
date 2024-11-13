@@ -1,16 +1,21 @@
-use pallas_primitives::babbage;
-use pallas_traverse::MultiEraOutput;
+use pallas_primitives::conway;
+use pallas_traverse::{MultiEraOutput, MultiEraValue};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Deref as _,
+};
 
 use super::*;
 
 pub type Hash<const N: usize> = pallas_crypto::hash::Hash<N>;
 pub type Address = pallas_addresses::Address;
-pub type Value = pallas_primitives::babbage::Value;
+pub type Value = pallas_primitives::conway::Value;
 pub type Bytes = pallas_codec::utils::Bytes;
 pub type KeyValuePairs<K, V> = pallas_codec::utils::KeyValuePairs<K, V>;
+pub type NonEmptyKeyValuePairs<K, V> = pallas_codec::utils::NonEmptyKeyValuePairs<K, V>;
+pub type NonEmptySet<T> = pallas_codec::utils::NonEmptySet<T>;
 
 pub type Cbor = Vec<u8>;
 
@@ -29,7 +34,7 @@ impl UtxoSet {
     pub fn txos(&self) -> impl Iterator<Item = MultiEraOutput<'_>> {
         self.0
             .values()
-            .map(|v| MultiEraOutput::decode(pallas_traverse::Era::Babbage, v).unwrap())
+            .map(|v| MultiEraOutput::decode(pallas_traverse::Era::Conway, v).unwrap())
     }
 }
 
@@ -64,7 +69,7 @@ impl Ledger for UtxoSet {
 pub struct UtxoPattern;
 
 pub trait InputExpr: 'static + Send + Sync {
-    fn eval(&self, ctx: &BuildContext) -> Result<Vec<babbage::TransactionInput>, BuildError>;
+    fn eval(&self, ctx: &BuildContext) -> Result<Vec<conway::TransactionInput>, BuildError>;
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -85,14 +90,14 @@ impl UtxoSource {
 #[serde_as]
 #[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
 pub struct ReferenceScript {
-    pub ref_txo: babbage::TransactionInput,
+    pub ref_txo: conway::TransactionInput,
     pub hash: Hash<28>,
     #[serde_as(as = "DisplayFromStr")]
     pub address: Address,
 }
 
 impl InputExpr for ReferenceScript {
-    fn eval(&self, _: &dsl::BuildContext) -> Result<Vec<babbage::TransactionInput>, BuildError> {
+    fn eval(&self, _: &dsl::BuildContext) -> Result<Vec<conway::TransactionInput>, BuildError> {
         Ok(vec![self.ref_txo.clone()])
     }
 }
@@ -224,14 +229,14 @@ impl TxoRef {
 }
 
 impl dsl::InputExpr for TxoRef {
-    fn eval(&self, _: &BuildContext) -> Result<Vec<babbage::TransactionInput>, BuildError> {
+    fn eval(&self, _: &BuildContext) -> Result<Vec<conway::TransactionInput>, BuildError> {
         Ok(vec![self.into()])
     }
 }
 
-impl Into<babbage::TransactionInput> for &TxoRef {
-    fn into(self) -> babbage::TransactionInput {
-        babbage::TransactionInput {
+impl Into<conway::TransactionInput> for &TxoRef {
+    fn into(self) -> conway::TransactionInput {
+        conway::TransactionInput {
             transaction_id: self.hash.into(),
             index: self.index,
         }
@@ -239,7 +244,7 @@ impl Into<babbage::TransactionInput> for &TxoRef {
 }
 
 impl InputExpr for UtxoSource {
-    fn eval(&self, ctx: &BuildContext) -> Result<Vec<babbage::TransactionInput>, BuildError> {
+    fn eval(&self, ctx: &BuildContext) -> Result<Vec<conway::TransactionInput>, BuildError> {
         let out = self.resolve(ctx)?.refs().map(|i| i.into()).collect();
 
         Ok(out)
@@ -247,48 +252,44 @@ impl InputExpr for UtxoSource {
 }
 
 pub trait ValueExpr: 'static + Send + Sync {
-    fn eval(&self, ctx: &BuildContext) -> Result<babbage::Value, BuildError>;
+    fn eval(&self, ctx: &BuildContext) -> Result<conway::Value, BuildError>;
 
-    fn eval_as_mint(&self, ctx: &BuildContext) -> Result<babbage::Mint, BuildError> {
+    fn eval_as_mint(&self, ctx: &BuildContext) -> Result<conway::Mint, BuildError> {
         let value = self.eval(ctx)?;
 
         match value {
-            babbage::Value::Multiasset(_, assets) => {
-                Ok(asset_math::multiasset_coin_to_mint(assets))
-            }
-            babbage::Value::Coin(_) => Err(BuildError::Conflicting),
+            conway::Value::Multiasset(_, assets) => asset_math::multiasset_coin_to_mint(assets),
+            conway::Value::Coin(_) => Err(BuildError::Conflicting),
         }
     }
 
-    fn eval_as_burn(&self, ctx: &BuildContext) -> Result<babbage::Mint, BuildError> {
+    fn eval_as_burn(&self, ctx: &BuildContext) -> Result<conway::Mint, BuildError> {
         let value = self.eval(ctx)?;
 
         match value {
-            babbage::Value::Multiasset(_, assets) => {
-                Ok(asset_math::multiasset_coin_to_burn(assets))
-            }
-            babbage::Value::Coin(_) => Err(BuildError::Conflicting),
+            conway::Value::Multiasset(_, assets) => asset_math::multiasset_coin_to_burn(assets),
+            conway::Value::Coin(_) => Err(BuildError::Conflicting),
         }
     }
 }
 
 impl ValueExpr for u64 {
-    fn eval(&self, _ctx: &BuildContext) -> Result<babbage::Value, BuildError> {
-        Ok(babbage::Value::Coin(*self))
+    fn eval(&self, _ctx: &BuildContext) -> Result<conway::Value, BuildError> {
+        Ok(conway::Value::Coin(*self))
     }
 }
 
 impl<F> ValueExpr for F
 where
-    F: Fn(&BuildContext) -> Result<babbage::Value, BuildError> + 'static + Send + Sync,
+    F: Fn(&BuildContext) -> Result<conway::Value, BuildError> + 'static + Send + Sync,
 {
-    fn eval(&self, ctx: &BuildContext) -> Result<babbage::Value, BuildError> {
+    fn eval(&self, ctx: &BuildContext) -> Result<conway::Value, BuildError> {
         self(ctx)
     }
 }
 
 impl<T: ValueExpr> ValueExpr for Option<T> {
-    fn eval(&self, ctx: &BuildContext) -> Result<babbage::Value, BuildError> {
+    fn eval(&self, ctx: &BuildContext) -> Result<conway::Value, BuildError> {
         match self {
             Some(v) => v.eval(ctx),
             None => Err(BuildError::Incomplete),
@@ -299,19 +300,19 @@ impl<T: ValueExpr> ValueExpr for Option<T> {
 pub struct MinUtxoLovelace;
 
 impl ValueExpr for MinUtxoLovelace {
-    fn eval(&self, ctx: &BuildContext) -> Result<babbage::Value, BuildError> {
-        Ok(babbage::Value::Coin(ctx.pparams.min_utxo_value))
+    fn eval(&self, ctx: &BuildContext) -> Result<conway::Value, BuildError> {
+        Ok(conway::Value::Coin(ctx.pparams.min_utxo_value))
     }
 }
 
 impl ValueExpr for Box<dyn ValueExpr> {
-    fn eval(&self, ctx: &BuildContext) -> Result<babbage::Value, BuildError> {
+    fn eval(&self, ctx: &BuildContext) -> Result<conway::Value, BuildError> {
         (**self).eval(ctx)
     }
 }
 
 impl<T: ValueExpr> ValueExpr for Vec<T> {
-    fn eval(&self, ctx: &BuildContext) -> Result<babbage::Value, BuildError> {
+    fn eval(&self, ctx: &BuildContext) -> Result<conway::Value, BuildError> {
         let values = self
             .iter()
             .map(|v| v.eval(ctx))
@@ -356,7 +357,7 @@ where
 }
 
 pub trait OutputExpr: 'static + Send + Sync {
-    fn eval(&self, ctx: &BuildContext) -> Result<babbage::TransactionOutput, BuildError>;
+    fn eval(&self, ctx: &BuildContext) -> Result<conway::TransactionOutput, BuildError>;
 }
 
 pub struct ChangeAddress(pub UtxoSource);
@@ -386,9 +387,9 @@ impl AddressExpr for ChangeAddress {
 pub struct TotalLovelaceMinusFee(pub UtxoSource);
 
 impl ValueExpr for TotalLovelaceMinusFee {
-    fn eval(&self, ctx: &BuildContext) -> Result<babbage::Value, BuildError> {
+    fn eval(&self, ctx: &BuildContext) -> Result<conway::Value, BuildError> {
         let utxo_set = &self.0.resolve(ctx)?;
-        let values = utxo_set.txos().map(|o| o.value().into_alonzo());
+        let values = utxo_set.txos().map(|o| into_conway(&o.value()));
         let total = asset_math::aggregate_values(values);
 
         let fee = ctx.estimated_fee;
@@ -398,10 +399,41 @@ impl ValueExpr for TotalLovelaceMinusFee {
     }
 }
 
+// TODO: this belongs in pallas-traverse
+// https://github.com/txpipe/pallas/pull/545
+fn into_conway(value: &MultiEraValue) -> conway::Value {
+    match value {
+        MultiEraValue::Byron(x) => conway::Value::Coin(*x),
+        MultiEraValue::AlonzoCompatible(x) => match x.deref() {
+            pallas_primitives::alonzo::Value::Coin(x) => conway::Value::Coin(*x),
+            pallas_primitives::alonzo::Value::Multiasset(x, assets) => {
+                let coin = *x;
+                let assets = assets
+                    .iter()
+                    .filter_map(|(k, v)| {
+                        let v: Vec<(conway::Bytes, conway::PositiveCoin)> = v
+                            .iter()
+                            .filter_map(|(k, v)| Some((k.clone(), (*v).try_into().ok()?)))
+                            .collect();
+                        Some((k.clone(), conway::NonEmptyKeyValuePairs::from_vec(v)?))
+                    })
+                    .collect();
+                if let Some(assets) = conway::NonEmptyKeyValuePairs::from_vec(assets) {
+                    conway::Value::Multiasset(coin, assets)
+                } else {
+                    conway::Value::Coin(coin)
+                }
+            }
+        },
+        MultiEraValue::Conway(x) => x.deref().clone(),
+        _ => panic!("unrecognized value"),
+    }
+}
+
 pub struct FeeChangeReturn(pub UtxoSource);
 
 impl OutputExpr for FeeChangeReturn {
-    fn eval(&self, ctx: &BuildContext) -> Result<babbage::TransactionOutput, BuildError> {
+    fn eval(&self, ctx: &BuildContext) -> Result<conway::TransactionOutput, BuildError> {
         OutputBuilder::new()
             .address(ChangeAddress(self.0.clone()))
             .with_value(TotalLovelaceMinusFee(self.0.clone()))
@@ -410,43 +442,43 @@ impl OutputExpr for FeeChangeReturn {
 }
 
 pub trait PlutusDataExpr: 'static + Send + Sync {
-    fn eval(&self, ctx: &BuildContext) -> Result<babbage::PlutusData, BuildError>;
+    fn eval(&self, ctx: &BuildContext) -> Result<conway::PlutusData, BuildError>;
 }
 
-impl PlutusDataExpr for babbage::PlutusData {
-    fn eval(&self, _ctx: &BuildContext) -> Result<babbage::PlutusData, BuildError> {
+impl PlutusDataExpr for conway::PlutusData {
+    fn eval(&self, _ctx: &BuildContext) -> Result<conway::PlutusData, BuildError> {
         Ok(self.clone())
     }
 }
 
 impl<F> PlutusDataExpr for F
 where
-    F: Fn(&BuildContext) -> Result<babbage::PlutusData, BuildError> + 'static + Send + Sync,
+    F: Fn(&BuildContext) -> Result<conway::PlutusData, BuildError> + 'static + Send + Sync,
 {
-    fn eval(&self, ctx: &BuildContext) -> Result<babbage::PlutusData, BuildError> {
+    fn eval(&self, ctx: &BuildContext) -> Result<conway::PlutusData, BuildError> {
         self(ctx)
     }
 }
 
 impl PlutusDataExpr for Box<dyn PlutusDataExpr> {
-    fn eval(&self, ctx: &BuildContext) -> Result<babbage::PlutusData, BuildError> {
+    fn eval(&self, ctx: &BuildContext) -> Result<conway::PlutusData, BuildError> {
         (**self).eval(ctx)
     }
 }
 
 impl PlutusDataExpr for () {
-    fn eval(&self, _ctx: &BuildContext) -> Result<babbage::PlutusData, BuildError> {
-        Ok(babbage::PlutusData::Constr(babbage::Constr {
+    fn eval(&self, _ctx: &BuildContext) -> Result<conway::PlutusData, BuildError> {
+        Ok(conway::PlutusData::Constr(conway::Constr {
             tag: 121,
             any_constructor: None,
-            fields: vec![],
+            fields: conway::MaybeIndefArray::Def(vec![]),
         }))
     }
 }
 
 pub trait MintExpr: 'static + Send + Sync {
-    fn eval(&self, ctx: &BuildContext) -> Result<babbage::Mint, BuildError>;
-    fn eval_redeemer(&self, ctx: &BuildContext) -> Result<babbage::Redeemer, BuildError>;
+    fn eval(&self, ctx: &BuildContext) -> Result<Option<conway::Mint>, BuildError>;
+    fn eval_redeemer(&self, ctx: &BuildContext) -> Result<Option<conway::Redeemer>, BuildError>;
 }
 
 #[derive(Default)]
@@ -478,7 +510,7 @@ impl MintBuilder {
 }
 
 impl MintExpr for MintBuilder {
-    fn eval(&self, ctx: &BuildContext) -> Result<primitives::Mint, BuildError> {
+    fn eval(&self, ctx: &BuildContext) -> Result<Option<primitives::Mint>, BuildError> {
         let out = HashMap::new();
 
         let out = self.assets.iter().try_fold(out, |mut acc, v| {
@@ -493,16 +525,21 @@ impl MintExpr for MintBuilder {
             Result::<_, BuildError>::Ok(acc)
         })?;
 
-        let mint: HashMap<_, _> = out
+        let mint: Vec<_> = out
             .into_iter()
-            .map(|(policy, assets)| (policy, KeyValuePairs::from(assets)))
+            .filter_map(|(policy, assets)| {
+                let assets = assets.into_iter().collect();
+                Some((policy, NonEmptyKeyValuePairs::from_vec(assets)?))
+            })
             .collect();
 
-        Ok(KeyValuePairs::from(mint))
+        Ok(NonEmptyKeyValuePairs::from_vec(mint))
     }
 
-    fn eval_redeemer(&self, ctx: &BuildContext) -> Result<babbage::Redeemer, BuildError> {
-        let mint = self.eval(ctx)?;
+    fn eval_redeemer(&self, ctx: &BuildContext) -> Result<Option<conway::Redeemer>, BuildError> {
+        let Some(mint) = self.eval(ctx)? else {
+            return Ok(None);
+        };
 
         if mint.is_empty() {
             return Err(BuildError::Incomplete);
@@ -520,14 +557,14 @@ impl MintExpr for MintBuilder {
             .ok_or(BuildError::Incomplete)?
             .eval(ctx)?;
 
-        let out = babbage::Redeemer {
-            tag: babbage::RedeemerTag::Mint,
+        let out = conway::Redeemer {
+            tag: conway::RedeemerTag::Mint,
             index: ctx.mint_redeemer_index(*policy)?,
             ex_units: ctx.eval_ex_units(*policy, &data),
             data,
         };
 
-        Ok(out)
+        Ok(Some(out))
     }
 }
 
@@ -556,9 +593,9 @@ impl OutputBuilder {
 }
 
 impl OutputExpr for OutputBuilder {
-    fn eval(&self, ctx: &BuildContext) -> Result<babbage::TransactionOutput, BuildError> {
-        Ok(babbage::TransactionOutput::PostAlonzo(
-            babbage::PostAlonzoTransactionOutput {
+    fn eval(&self, ctx: &BuildContext) -> Result<conway::TransactionOutput, BuildError> {
+        Ok(conway::TransactionOutput::PostAlonzo(
+            conway::PostAlonzoTransactionOutput {
                 address: self.address.eval(ctx)?.to_vec().into(),
                 value: self.values.eval(ctx)?,
                 datum_option: None, // TODO
@@ -569,26 +606,26 @@ impl OutputExpr for OutputBuilder {
 }
 
 pub trait TxExpr: 'static + Send + Sync {
-    fn eval_body(&self, ctx: &BuildContext) -> Result<babbage::TransactionBody, BuildError>;
-    fn eval_witness_set(&self, ctx: &BuildContext) -> Result<babbage::WitnessSet, BuildError>;
+    fn eval_body(&self, ctx: &BuildContext) -> Result<conway::TransactionBody, BuildError>;
+    fn eval_witness_set(&self, ctx: &BuildContext) -> Result<conway::WitnessSet, BuildError>;
 }
 
 impl<T: TxExpr> TxExpr for &'static T {
-    fn eval_body(&self, ctx: &BuildContext) -> Result<babbage::TransactionBody, BuildError> {
+    fn eval_body(&self, ctx: &BuildContext) -> Result<conway::TransactionBody, BuildError> {
         (**self).eval_body(ctx)
     }
 
-    fn eval_witness_set(&self, ctx: &BuildContext) -> Result<babbage::WitnessSet, BuildError> {
+    fn eval_witness_set(&self, ctx: &BuildContext) -> Result<conway::WitnessSet, BuildError> {
         (**self).eval_witness_set(ctx)
     }
 }
 
 impl TxExpr for Box<dyn TxExpr> {
-    fn eval_body(&self, ctx: &BuildContext) -> Result<babbage::TransactionBody, BuildError> {
+    fn eval_body(&self, ctx: &BuildContext) -> Result<conway::TransactionBody, BuildError> {
         (**self).eval_body(ctx)
     }
 
-    fn eval_witness_set(&self, ctx: &BuildContext) -> Result<babbage::WitnessSet, BuildError> {
+    fn eval_witness_set(&self, ctx: &BuildContext) -> Result<conway::WitnessSet, BuildError> {
         (**self).eval_witness_set(ctx)
     }
 }
@@ -648,8 +685,8 @@ impl TxBuilder {
 }
 
 impl TxExpr for TxBuilder {
-    fn eval_body(&self, ctx: &BuildContext) -> Result<babbage::TransactionBody, BuildError> {
-        let out = babbage::TransactionBody {
+    fn eval_body(&self, ctx: &BuildContext) -> Result<conway::TransactionBody, BuildError> {
+        let out = conway::TransactionBody {
             inputs: self
                 .inputs
                 .iter()
@@ -657,7 +694,8 @@ impl TxExpr for TxBuilder {
                 .collect::<Result<Vec<_>, _>>()?
                 .into_iter()
                 .flatten()
-                .collect(),
+                .collect::<Vec<_>>()
+                .into(),
             outputs: self
                 .outputs
                 .iter()
@@ -668,20 +706,17 @@ impl TxExpr for TxBuilder {
             validity_interval_start: None,
             certificates: None,
             withdrawals: None,
-            update: None,
             auxiliary_data_hash: None,
             mint: {
                 let mints = self
                     .mint
                     .iter()
                     .map(|m| m.eval(ctx))
-                    .collect::<Result<Vec<_>, _>>()?;
+                    .collect::<Result<Vec<_>, _>>()?
+                    .into_iter()
+                    .filter_map(|m| m);
 
-                if mints.is_empty() {
-                    None
-                } else {
-                    Some(asset_math::aggregate_assets(mints))
-                }
+                asset_math::aggregate_assets(mints)
             },
             script_data_hash: None,
             collateral: None,
@@ -699,30 +734,35 @@ impl TxExpr for TxBuilder {
                     .flatten()
                     .collect();
 
-                if refs.is_empty() {
-                    None
-                } else {
-                    Some(refs)
-                }
+                NonEmptySet::from_vec(refs)
             },
+            voting_procedures: None,
+            proposal_procedures: None,
+            treasury_value: None,
+            donation: None,
         };
 
         Ok(out)
     }
 
-    fn eval_witness_set(&self, ctx: &BuildContext) -> Result<babbage::WitnessSet, BuildError> {
-        let out = babbage::WitnessSet {
+    fn eval_witness_set(&self, ctx: &BuildContext) -> Result<conway::WitnessSet, BuildError> {
+        let out = conway::WitnessSet {
             redeemer: {
-                let redeemers = self
+                let redeemers: Vec<_> = self
                     .mint
                     .iter()
                     .map(|m| m.eval_redeemer(ctx))
-                    .collect::<Result<Vec<_>, _>>()?;
+                    .collect::<Result<Vec<_>, _>>()?
+                    .into_iter()
+                    .filter_map(|r| r)
+                    .collect();
 
                 if redeemers.is_empty() {
                     None
                 } else {
-                    Some(redeemers)
+                    Some(conway::Redeemers::List(conway::MaybeIndefArray::Def(
+                        redeemers,
+                    )))
                 }
             },
             vkeywitness: None,
@@ -731,6 +771,7 @@ impl TxExpr for TxBuilder {
             plutus_v1_script: None,
             plutus_data: None,
             plutus_v2_script: None,
+            plutus_v3_script: None,
         };
 
         Ok(out)
@@ -741,11 +782,11 @@ impl TxExpr for TxBuilder {
 macro_rules! define_asset_class {
     ($struct_name:ident, $policy:expr) => {
         #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-        pub struct $struct_name($crate::txbuilder::Bytes, i64);
+        pub struct $struct_name($crate::txbuilder::Bytes, u64);
 
         impl $struct_name {
             pub fn value(name: $crate::txbuilder::AssetName, quantity: u64) -> Self {
-                Self(name.into(), quantity as i64)
+                Self(name.into(), quantity)
             }
         }
 
@@ -756,10 +797,13 @@ macro_rules! define_asset_class {
             ) -> std::result::Result<$crate::txbuilder::Value, $crate::txbuilder::BuildError> {
                 let policy = $crate::txbuilder::Hash::from(*$policy);
                 let name = $crate::txbuilder::Bytes::from(self.0.clone());
-                let asset = $crate::txbuilder::KeyValuePairs::from(vec![(name, self.1 as u64)]);
+                let Ok(amount) = self.1.try_into() else {
+                    return Ok($crate::txbuilder::Value::Coin(0));
+                };
+                let asset = $crate::txbuilder::NonEmptyKeyValuePairs::Def(vec![(name, amount)]);
                 let val = $crate::txbuilder::Value::Multiasset(
                     0,
-                    $crate::txbuilder::KeyValuePairs::from(vec![(policy, asset)]),
+                    $crate::txbuilder::NonEmptyKeyValuePairs::Def(vec![(policy, asset)]),
                 );
 
                 Ok(val)

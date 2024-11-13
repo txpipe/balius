@@ -1,11 +1,13 @@
-
-use balius_sdk::{txbuilder::{
-    Address, AssetName, FeeChangeReturn, MinUtxoLovelace, MintBuilder, OutputBuilder, ReferenceScript, TxBuilder, UtxoSource
-}, NewTx, WorkerResult};
-use balius_sdk::{FnHandler, Worker, Config, Params};
+use balius_sdk::{
+    txbuilder::{
+        Address, AssetName, FeeChangeReturn, MinUtxoLovelace, MintBuilder, OutputBuilder,
+        ReferenceScript, TxBuilder, UtxoSource,
+    },
+    NewTx, WorkerResult,
+};
+use balius_sdk::{Config, FnHandler, Params, Worker};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
-
 
 #[derive(Serialize, Deserialize, Clone)]
 struct FaucetConfig {
@@ -54,9 +56,9 @@ fn main() -> Worker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
-    use balius_sdk::txbuilder::{Address, Hash, UtxoSet, primitives};
-    
+
+    use balius_sdk::txbuilder::{primitives, Address, Hash, UtxoSet};
+
     use std::{collections::HashMap, str::FromStr as _};
 
     #[test]
@@ -70,9 +72,14 @@ mod tests {
 
         let cbor = pallas_codec::minicbor::to_vec(&output).unwrap();
 
-        let test_utxos: HashMap<_, _> = vec![
-            ("f7d3837715680f3a170e99cd202b726842d97f82c05af8fcd18053c64e33ec4f#0".parse().unwrap(), cbor),
-        ].into_iter().collect();
+        let test_utxos: HashMap<_, _> = vec![(
+            "f7d3837715680f3a170e99cd202b726842d97f82c05af8fcd18053c64e33ec4f#0"
+                .parse()
+                .unwrap(),
+            cbor,
+        )]
+        .into_iter()
+        .collect();
 
         let ledger = UtxoSet::from(test_utxos);
 
@@ -80,7 +87,7 @@ mod tests {
             validator: ReferenceScript {
                 hash: Hash::from_str("ef7a1cebb2dc7de884ddf82f8fcbc91fe9750dcd8c12ec7643a99bbe").unwrap(),
                 address: Address::from_bech32("addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x").unwrap(),
-                ref_txo: primitives::TransactionInput { 
+                ref_txo: primitives::TransactionInput {
                     transaction_id: Hash::from_str(
                         "f7d3837715680f3a170e99cd202b726842d97f82c05af8fcd18053c64e33ec4f",
                     )

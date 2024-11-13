@@ -26,6 +26,10 @@ pub enum BuildError {
     MalformedKey,
     #[error("Asset name must be 32 bytes or less")]
     AssetNameTooLong,
+    #[error("Asset value must be less than 9223372036854775807")]
+    AssetValueTooHigh,
+    #[error("Set of assets to mint/burn is empty")]
+    EmptyAssetSet,
     #[error("Invalid asset policy id hex")]
     MalformedAssetPolicyIdHex,
     #[error("Malformed TxoRef")]
@@ -41,7 +45,7 @@ impl From<crate::wit::balius::app::ledger::LedgerError> for BuildError {
 }
 
 pub use pallas_codec as codec;
-pub use pallas_primitives::babbage as primitives;
+pub use pallas_primitives::conway as primitives;
 
 pub struct PParams {
     pub min_fee_a: u64,

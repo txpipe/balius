@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 balius-sdk = { path = "../../balius-sdk" }
-pallas-primitives = "0.30.0"
+pallas-primitives = "0.31.0"
 serde = { version = "1.0.204", features = ["derive"] }
 
 [lib]

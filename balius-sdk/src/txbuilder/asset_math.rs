@@ -1,24 +1,39 @@
-use pallas_codec::utils::KeyValuePairs;
 use pallas_crypto::hash::Hash;
-use pallas_primitives::babbage::{self, Value};
-use std::collections::HashMap;
+use pallas_primitives::{
+    conway::{self, Value},
+    NonEmptyKeyValuePairs, NonZeroInt, PositiveCoin,
+};
+use std::collections::{hash_map::Entry, HashMap};
 
-pub fn fold_assets<T>(
+use super::BuildError;
+
+fn fold_assets<T>(
     acc: &mut HashMap<pallas_codec::utils::Bytes, T>,
-    item: KeyValuePairs<pallas_codec::utils::Bytes, T>,
+    item: NonEmptyKeyValuePairs<pallas_codec::utils::Bytes, T>,
 ) where
-    T: std::ops::AddAssign + Copy,
+    T: SafeAdd + Copy,
 {
     for (key, value) in item.to_vec() {
-        acc.entry(key).and_modify(|e| *e += value).or_insert(value);
+        match acc.entry(key) {
+            Entry::Occupied(mut entry) => {
+                if let Some(new_val) = value.try_add(*entry.get()) {
+                    entry.insert(new_val);
+                } else {
+                    entry.remove();
+                }
+            }
+            Entry::Vacant(entry) => {
+                entry.insert(value);
+            }
+        }
     }
 }
 
 pub fn fold_multiassets<T>(
     acc: &mut HashMap<Hash<28>, HashMap<pallas_codec::utils::Bytes, T>>,
-    item: KeyValuePairs<Hash<28>, KeyValuePairs<pallas_codec::utils::Bytes, T>>,
+    item: NonEmptyKeyValuePairs<Hash<28>, NonEmptyKeyValuePairs<pallas_codec::utils::Bytes, T>>,
 ) where
-    T: std::ops::AddAssign + Copy,
+    T: SafeAdd + Copy,
 {
     for (key, value) in item.to_vec() {
         let mut map = acc.remove(&key).unwrap_or_default();
@@ -28,10 +43,10 @@ pub fn fold_multiassets<T>(
 }
 
 pub fn aggregate_assets<T>(
-    items: impl IntoIterator<Item = babbage::Multiasset<T>>,
-) -> babbage::Multiasset<T>
+    items: impl IntoIterator<Item = conway::Multiasset<T>>,
+) -> Option<conway::Multiasset<T>>
 where
-    T: std::ops::AddAssign + Copy,
+    T: SafeAdd + Copy,
 {
     let mut total_assets = HashMap::new();
 
@@ -39,63 +54,75 @@ where
         fold_multiassets(&mut total_assets, assets);
     }
 
-    total_assets
+    let total_assets_vec = total_assets
         .into_iter()
-        .map(|(policy_id, assets)| (policy_id, assets.into()))
-        .collect()
+        .filter_map(|(key, assets)| {
+            let assets_vec = assets.into_iter().collect();
+            Some((key, NonEmptyKeyValuePairs::from_vec(assets_vec)?))
+        })
+        .collect();
+
+    NonEmptyKeyValuePairs::from_vec(total_assets_vec)
 }
 
 pub fn aggregate_values(items: impl IntoIterator<Item = Value>) -> Value {
     let mut total_coin = 0;
-    let mut total_assets = KeyValuePairs::Def(vec![]);
+    let mut assets = vec![];
 
     for value in items {
-        let (coin, assets) = match value {
-            Value::Coin(x) => (x, KeyValuePairs::Def(vec![])),
-            Value::Multiasset(x, y) => (x, y),
-        };
-
-        total_coin += coin;
-        total_assets = aggregate_assets(vec![total_assets, assets]);
+        match value {
+            Value::Coin(x) => {
+                total_coin += x;
+            }
+            Value::Multiasset(x, y) => {
+                total_coin += x;
+                assets.push(y);
+            }
+        }
     }
 
-    if total_assets.is_empty() {
-        Value::Coin(total_coin)
-    } else {
+    if let Some(total_assets) = aggregate_assets(assets) {
         Value::Multiasset(total_coin, total_assets)
+    } else {
+        Value::Coin(total_coin)
     }
 }
 
-pub fn multiasset_coin_to_mint(assets: babbage::Multiasset<babbage::Coin>) -> babbage::Mint {
-    assets
-        .to_vec()
-        .into_iter()
-        .map(|(policy, assets)| {
-            let assets: KeyValuePairs<_, _> = assets
-                .to_vec()
-                .into_iter()
-                .map(|(name, quantity)| (name, quantity as i64))
-                .collect();
+fn try_to_mint<F>(
+    assets: conway::Multiasset<PositiveCoin>,
+    f: F,
+) -> Result<conway::Mint, BuildError>
+where
+    F: Fn(i64) -> Result<NonZeroInt, i64>,
+{
+    let mut new_assets = vec![];
+    for (policy, asset) in assets {
+        let mut new_asset = vec![];
+        for (name, quantity) in asset {
+            let quantity: u64 = quantity.into();
+            if quantity > i64::MAX as u64 {
+                return Err(BuildError::AssetValueTooHigh);
+            }
+            let quantity: NonZeroInt = f(quantity as i64).unwrap();
+            new_asset.push((name, quantity));
+        }
+        let asset = NonEmptyKeyValuePairs::from_vec(new_asset).unwrap();
+        new_assets.push((policy, asset));
+    }
 
-            (policy, KeyValuePairs::from(assets))
-        })
-        .collect()
+    Ok(NonEmptyKeyValuePairs::from_vec(new_assets).unwrap())
 }
 
-pub fn multiasset_coin_to_burn(assets: babbage::Multiasset<babbage::Coin>) -> babbage::Mint {
-    assets
-        .to_vec()
-        .into_iter()
-        .map(|(policy, assets)| {
-            let assets: KeyValuePairs<_, _> = assets
-                .to_vec()
-                .into_iter()
-                .map(|(name, quantity)| (name, -(quantity as i64)))
-                .collect();
+pub fn multiasset_coin_to_mint(
+    assets: conway::Multiasset<PositiveCoin>,
+) -> Result<conway::Mint, BuildError> {
+    try_to_mint(assets, |quantity| quantity.try_into())
+}
 
-            (policy, KeyValuePairs::from(assets))
-        })
-        .collect()
+pub fn multiasset_coin_to_burn(
+    assets: conway::Multiasset<PositiveCoin>,
+) -> Result<conway::Mint, BuildError> {
+    try_to_mint(assets, |quantity| (-quantity).try_into())
 }
 
 pub fn value_saturating_add_coin(value: Value, coin: i64) -> Value {
@@ -105,12 +132,32 @@ pub fn value_saturating_add_coin(value: Value, coin: i64) -> Value {
     }
 }
 
+pub trait SafeAdd: Sized {
+    fn try_add(self, other: Self) -> Option<Self>;
+}
+
+impl SafeAdd for NonZeroInt {
+    fn try_add(self, other: Self) -> Option<Self> {
+        let lhs: i64 = self.into();
+        let rhs: i64 = other.into();
+        NonZeroInt::try_from(lhs.checked_add(rhs)?).ok()
+    }
+}
+
+impl SafeAdd for PositiveCoin {
+    fn try_add(self, other: Self) -> Option<Self> {
+        let lhs: u64 = self.into();
+        let rhs: u64 = other.into();
+        PositiveCoin::try_from(lhs.checked_add(rhs)?).ok()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr as _;
 
     use super::*;
-    use pallas_primitives::alonzo::Value;
+    use pallas_primitives::conway::Value;
 
     #[test]
     fn test_add_values_coin_only() {
@@ -132,16 +179,22 @@ mod tests {
 
         let value_a = Value::Multiasset(
             100,
-            KeyValuePairs::Def(vec![(
+            NonEmptyKeyValuePairs::Def(vec![(
                 policy_id,
-                KeyValuePairs::Def(vec![(asset_name.clone().into(), 50)]),
+                NonEmptyKeyValuePairs::Def(vec![(
+                    asset_name.clone().into(),
+                    50.try_into().unwrap(),
+                )]),
             )]),
         );
         let value_b = Value::Multiasset(
             200,
-            KeyValuePairs::Def(vec![(
+            NonEmptyKeyValuePairs::Def(vec![(
                 policy_id,
-                KeyValuePairs::Def(vec![(asset_name.clone().into(), 30)]),
+                NonEmptyKeyValuePairs::Def(vec![(
+                    asset_name.clone().into(),
+                    30.try_into().unwrap(),
+                )]),
             )]),
         );
 
@@ -151,9 +204,12 @@ mod tests {
             result,
             Value::Multiasset(
                 300,
-                KeyValuePairs::Def(vec![(
+                NonEmptyKeyValuePairs::Def(vec![(
                     policy_id,
-                    KeyValuePairs::Def(vec![(asset_name.clone().into(), 80)]),
+                    NonEmptyKeyValuePairs::Def(vec![(
+                        asset_name.clone().into(),
+                        80.try_into().unwrap()
+                    )]),
                 )]),
             )
         );
