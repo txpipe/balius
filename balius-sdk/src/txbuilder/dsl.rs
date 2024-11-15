@@ -66,7 +66,7 @@ impl Ledger for UtxoSet {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub struct UtxoPattern {
     pub address: Option<AddressPattern>,
     pub asset: Option<AssetPattern>,
