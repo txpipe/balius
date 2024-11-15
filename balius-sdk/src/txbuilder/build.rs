@@ -1,4 +1,4 @@
-use std::ops::Deref as _;
+use std::{collections::HashMap, ops::Deref as _};
 
 use pallas_traverse::MultiEraValue;
 
@@ -54,7 +54,25 @@ impl crate::txbuilder::Ledger for ExtLedgerFacade {
     }
 
     fn search_utxos(&self, pattern: &UtxoPattern) -> Result<UtxoSet, BuildError> {
-        todo!()
+        let pattern = pattern.clone().into();
+        let mut utxos = HashMap::new();
+        let max_items = 32;
+        let mut utxo_page = Some(crate::wit::balius::app::ledger::search_utxos(
+            &pattern, None, max_items,
+        )?);
+        while let Some(page) = utxo_page.take() {
+            for utxo in page.utxos {
+                utxos.insert(utxo.ref_.into(), utxo.body);
+            }
+            if let Some(next) = page.next_token {
+                utxo_page = Some(crate::wit::balius::app::ledger::search_utxos(
+                    &pattern,
+                    Some(&next),
+                    max_items,
+                )?);
+            }
+        }
+        Ok(utxos.into())
     }
 }
 

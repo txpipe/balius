@@ -63,7 +63,47 @@ impl Ledger for UtxoSet {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct UtxoPattern;
+pub struct UtxoPattern {
+    pub address: Option<AddressPattern>,
+    pub asset: Option<AssetPattern>,
+}
+
+impl From<UtxoPattern> for crate::wit::balius::app::ledger::UtxoPattern {
+    fn from(value: UtxoPattern) -> Self {
+        Self {
+            address: value.address.map(Into::into),
+            asset: value.asset.map(Into::into),
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct AddressPattern {
+    pub exact_address: Vec<u8>,
+}
+
+impl From<AddressPattern> for crate::wit::balius::app::ledger::AddressPattern {
+    fn from(value: AddressPattern) -> Self {
+        Self {
+            exact_address: value.exact_address,
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct AssetPattern {
+    pub policy: Vec<u8>,
+    pub name: Option<Vec<u8>>,
+}
+
+impl From<AssetPattern> for crate::wit::balius::app::ledger::AssetPattern {
+    fn from(value: AssetPattern) -> Self {
+        Self {
+            policy: value.policy,
+            name: value.name,
+        }
+    }
+}
 
 pub trait InputExpr: 'static + Send + Sync {
     fn eval(&self, ctx: &BuildContext) -> Result<Vec<conway::TransactionInput>, BuildError>;
