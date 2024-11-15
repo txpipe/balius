@@ -24,6 +24,10 @@ impl UtxoSet {
         self.0.is_empty()
     }
 
+    pub fn iter(&self) -> impl Iterator<Item = (&TxoRef, MultiEraOutput<'_>)> {
+        self.0.iter().map(|(k, v)| (k, MultiEraOutput::decode(pallas_traverse::Era::Conway, v).unwrap()))
+    }
+
     pub fn refs(&self) -> impl Iterator<Item = &TxoRef> {
         self.0.keys()
     }
