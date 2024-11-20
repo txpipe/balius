@@ -23,6 +23,7 @@ pub mod ledgers;
 pub mod submit;
 
 pub use store::Store;
+pub use wit::Response;
 
 pub type WorkerId = String;
 
