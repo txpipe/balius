@@ -1,11 +1,8 @@
 use pallas_primitives::conway;
-use pallas_traverse::{MultiEraOutput, MultiEraValue};
+use pallas_traverse::MultiEraOutput;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
-use std::{
-    collections::{HashMap, HashSet},
-    ops::Deref as _,
-};
+use std::collections::{HashMap, HashSet};
 
 use super::*;
 
@@ -25,6 +22,10 @@ pub struct UtxoSet(HashMap<TxoRef, Cbor>);
 impl UtxoSet {
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&TxoRef, MultiEraOutput<'_>)> {
+        self.0.iter().map(|(k, v)| (k, MultiEraOutput::decode(pallas_traverse::Era::Conway, v).unwrap()))
     }
 
     pub fn refs(&self) -> impl Iterator<Item = &TxoRef> {
@@ -65,8 +66,48 @@ impl Ledger for UtxoSet {
     }
 }
 
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub struct UtxoPattern {
+    pub address: Option<AddressPattern>,
+    pub asset: Option<AssetPattern>,
+}
+
+impl From<UtxoPattern> for crate::wit::balius::app::ledger::UtxoPattern {
+    fn from(value: UtxoPattern) -> Self {
+        Self {
+            address: value.address.map(Into::into),
+            asset: value.asset.map(Into::into),
+        }
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
-pub struct UtxoPattern;
+pub struct AddressPattern {
+    pub exact_address: Vec<u8>,
+}
+
+impl From<AddressPattern> for crate::wit::balius::app::ledger::AddressPattern {
+    fn from(value: AddressPattern) -> Self {
+        Self {
+            exact_address: value.exact_address,
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct AssetPattern {
+    pub policy: Vec<u8>,
+    pub name: Option<Vec<u8>>,
+}
+
+impl From<AssetPattern> for crate::wit::balius::app::ledger::AssetPattern {
+    fn from(value: AssetPattern) -> Self {
+        Self {
+            policy: value.policy,
+            name: value.name,
+        }
+    }
+}
 
 pub trait InputExpr: 'static + Send + Sync {
     fn eval(&self, ctx: &BuildContext) -> Result<Vec<conway::TransactionInput>, BuildError>;
@@ -384,49 +425,14 @@ impl AddressExpr for ChangeAddress {
     }
 }
 
-pub struct TotalLovelaceMinusFee(pub UtxoSource);
+pub struct TotalChange;
 
-impl ValueExpr for TotalLovelaceMinusFee {
+impl ValueExpr for TotalChange {
     fn eval(&self, ctx: &BuildContext) -> Result<conway::Value, BuildError> {
-        let utxo_set = &self.0.resolve(ctx)?;
-        let values = utxo_set.txos().map(|o| into_conway(&o.value()));
-        let total = asset_math::aggregate_values(values);
-
+        let change = asset_math::subtract_value(&ctx.total_input, &ctx.spent_output)?;
         let fee = ctx.estimated_fee;
-        let diff = asset_math::value_saturating_add_coin(total, -(fee as i64));
-
+        let diff = asset_math::value_saturating_add_coin(change, -(fee as i64));
         Ok(diff)
-    }
-}
-
-// TODO: this belongs in pallas-traverse
-// https://github.com/txpipe/pallas/pull/545
-fn into_conway(value: &MultiEraValue) -> conway::Value {
-    match value {
-        MultiEraValue::Byron(x) => conway::Value::Coin(*x),
-        MultiEraValue::AlonzoCompatible(x) => match x.deref() {
-            pallas_primitives::alonzo::Value::Coin(x) => conway::Value::Coin(*x),
-            pallas_primitives::alonzo::Value::Multiasset(x, assets) => {
-                let coin = *x;
-                let assets = assets
-                    .iter()
-                    .filter_map(|(k, v)| {
-                        let v: Vec<(conway::Bytes, conway::PositiveCoin)> = v
-                            .iter()
-                            .filter_map(|(k, v)| Some((k.clone(), (*v).try_into().ok()?)))
-                            .collect();
-                        Some((k.clone(), conway::NonEmptyKeyValuePairs::from_vec(v)?))
-                    })
-                    .collect();
-                if let Some(assets) = conway::NonEmptyKeyValuePairs::from_vec(assets) {
-                    conway::Value::Multiasset(coin, assets)
-                } else {
-                    conway::Value::Coin(coin)
-                }
-            }
-        },
-        MultiEraValue::Conway(x) => x.deref().clone(),
-        _ => panic!("unrecognized value"),
     }
 }
 
@@ -436,7 +442,7 @@ impl OutputExpr for FeeChangeReturn {
     fn eval(&self, ctx: &BuildContext) -> Result<conway::TransactionOutput, BuildError> {
         OutputBuilder::new()
             .address(ChangeAddress(self.0.clone()))
-            .with_value(TotalLovelaceMinusFee(self.0.clone()))
+            .with_value(TotalChange)
             .eval(ctx)
     }
 }

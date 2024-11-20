@@ -28,8 +28,8 @@ pub enum BuildError {
     AssetNameTooLong,
     #[error("Asset value must be less than 9223372036854775807")]
     AssetValueTooHigh,
-    #[error("Set of assets to mint/burn is empty")]
-    EmptyAssetSet,
+    #[error("Total outputs of this transaction are greater than total inputs")]
+    OutputsTooHigh,
     #[error("Invalid asset policy id hex")]
     MalformedAssetPolicyIdHex,
     #[error("Malformed TxoRef")]
@@ -57,6 +57,8 @@ pub trait Ledger {
 pub struct BuildContext {
     pub network: primitives::NetworkId,
     pub pparams: PParams,
+    pub total_input: primitives::Value,
+    pub spent_output: primitives::Value,
     pub estimated_fee: u64,
     pub ledger: Box<dyn Ledger>,
 

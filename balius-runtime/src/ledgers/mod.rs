@@ -1,12 +1,19 @@
+use std::sync::Arc;
+
+use tokio::sync::Mutex;
+
 use crate::wit::balius::app::ledger as wit;
 
 pub mod mock;
 pub mod u5c;
 
+pub use wit::{Host as CustomLedger, LedgerError, TxoRef, Utxo, UtxoPage, UtxoPattern};
+
 #[derive(Clone)]
 pub enum Ledger {
     Mock(mock::Ledger),
     U5C(u5c::Ledger),
+    Custom(Arc<Mutex<dyn wit::Host + Send + Sync>>),
 }
 
 impl From<mock::Ledger> for Ledger {
@@ -30,6 +37,10 @@ impl wit::Host for Ledger {
         match self {
             Ledger::Mock(ledger) => ledger.read_utxos(refs).await,
             Ledger::U5C(ledger) => ledger.read_utxos(refs).await,
+            Ledger::Custom(ledger) => {
+                let mut lock = ledger.lock().await;
+                lock.read_utxos(refs).await
+            }
         }
     }
 
@@ -42,6 +53,10 @@ impl wit::Host for Ledger {
         match self {
             Ledger::Mock(ledger) => ledger.search_utxos(pattern, start, max_items).await,
             Ledger::U5C(ledger) => ledger.search_utxos(pattern, start, max_items).await,
+            Ledger::Custom(ledger) => {
+                let mut lock = ledger.lock().await;
+                lock.search_utxos(pattern, start, max_items).await
+            }
         }
     }
 
