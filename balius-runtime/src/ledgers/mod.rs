@@ -64,6 +64,10 @@ impl wit::Host for Ledger {
         match self {
             Ledger::Mock(ledger) => ledger.read_params().await,
             Ledger::U5C(ledger) => ledger.read_params().await,
+            Ledger::Custom(ledger) => {
+                let mut lock = ledger.lock().await;
+                lock.read_params().await
+            }
         }
     }
 }
