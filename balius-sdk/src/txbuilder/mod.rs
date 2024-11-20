@@ -46,16 +46,12 @@ impl From<crate::wit::balius::app::ledger::LedgerError> for BuildError {
 
 pub use pallas_codec as codec;
 pub use pallas_primitives::conway as primitives;
-
-pub struct PParams {
-    pub min_fee_a: u64,
-    pub min_fee_b: u64,
-    pub min_utxo_value: u64,
-}
+pub use utxorpc_spec::utxorpc::v1alpha::cardano::PParams;
 
 pub trait Ledger {
     fn read_utxos(&self, refs: &[dsl::TxoRef]) -> Result<dsl::UtxoSet, BuildError>;
     fn search_utxos(&self, pattern: &dsl::UtxoPattern) -> Result<dsl::UtxoSet, BuildError>;
+    fn read_params(&self) -> Result<PParams, BuildError>;
 }
 
 pub struct BuildContext {

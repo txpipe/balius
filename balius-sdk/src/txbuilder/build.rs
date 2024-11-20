@@ -74,6 +74,13 @@ impl crate::txbuilder::Ledger for ExtLedgerFacade {
         }
         Ok(utxos.into())
     }
+
+    fn read_params(&self) -> Result<PParams, BuildError> {
+        let bytes = crate::wit::balius::app::ledger::read_params()?;
+
+        serde_json::from_slice(&bytes)
+            .map_err(|_| BuildError::LedgerError("failed to parse params json".to_string()))
+    }
 }
 
 pub fn build<T, L>(tx: T, ledger: L) -> Result<primitives::Tx, BuildError>
@@ -83,11 +90,7 @@ where
 {
     let mut ctx = BuildContext {
         network: primitives::NetworkId::Testnet,
-        pparams: PParams {
-            min_fee_a: 4,
-            min_fee_b: 3,
-            min_utxo_value: 2,
-        },
+        pparams: ledger.read_params()?,
         total_input: primitives::Value::Coin(0),
         spent_output: primitives::Value::Coin(0),
         estimated_fee: 0,
