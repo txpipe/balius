@@ -44,4 +44,11 @@ impl wit::Host for Ledger {
             Ledger::U5C(ledger) => ledger.search_utxos(pattern, start, max_items).await,
         }
     }
+
+    async fn read_params(&mut self) -> Result<wit::Json, wit::LedgerError> {
+        match self {
+            Ledger::Mock(ledger) => ledger.read_params().await,
+            Ledger::U5C(ledger) => ledger.read_params().await,
+        }
+    }
 }

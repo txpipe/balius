@@ -11,6 +11,7 @@ interface kv {
 
 interface ledger {
     type cbor = list<u8>;
+    type json = list<u8>;
 
     variant ledger-error {
         upstream(string),
@@ -49,6 +50,7 @@ interface ledger {
 
     read-utxos: func(refs: list<txo-ref>) -> result<list<utxo>, ledger-error>;
     search-utxos: func(pattern: utxo-pattern, start: option<string>, max-items: u32) -> result<utxo-page, ledger-error>;
+    read-params: func() -> result<json, ledger-error>;
 }
 
 interface submit {
