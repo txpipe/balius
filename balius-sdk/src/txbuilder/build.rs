@@ -1,6 +1,6 @@
-use std::{collections::HashMap, ops::Deref as _};
-
 use pallas_traverse::MultiEraValue;
+use std::sync::Arc;
+use std::{collections::HashMap, ops::Deref as _};
 
 use super::{
     asset_math, primitives, BuildContext, BuildError, Ledger, PParams, TxExpr, TxoRef, UtxoPattern,
@@ -83,7 +83,7 @@ impl crate::txbuilder::Ledger for ExtLedgerFacade {
     }
 }
 
-pub fn build<T, L>(tx: T, ledger: L) -> Result<primitives::Tx, BuildError>
+pub fn build<T, L>(mut tx: T, ledger: L) -> Result<primitives::Tx, BuildError>
 where
     T: TxExpr,
     L: Ledger + 'static,
@@ -94,8 +94,9 @@ where
         total_input: primitives::Value::Coin(0),
         spent_output: primitives::Value::Coin(0),
         estimated_fee: 0,
-        ledger: Box::new(ledger),
+        ledger: Arc::new(Box::new(ledger)),
         tx_body: None,
+        parent_output: None,
     };
 
     // Build the raw transaction, so we have the info needed to estimate fees and
@@ -120,6 +121,10 @@ where
     // Now that we know the inputs/outputs/fee, build the "final" (unsigned)tx
     let body = tx.eval_body(&ctx)?;
     ctx.tx_body = Some(body);
+    for _ in 0..3 {
+        let body = tx.eval_body(&ctx)?;
+        ctx.tx_body = Some(body);
+    }
 
     let wit = tx.eval_witness_set(&ctx).unwrap();
 
