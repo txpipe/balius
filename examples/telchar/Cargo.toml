@@ -1,0 +1,15 @@
+[package]
+name = "telchar"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+balius-sdk = { path = "../../balius-sdk" }
+hex = "0.4.3"
+pallas-primitives = "0.31.0"
+serde = { version = "1.0.204", features = ["derive"] }
+
+[lib]
+crate-type = ["cdylib"]

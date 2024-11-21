@@ -108,9 +108,6 @@ mod tests {
 
         let tx = claim(Config(config), Params(request)).unwrap();
 
-        let tx = balius_sdk::txbuilder::build(tx.0, ledger).unwrap();
-
-        dbg!(&tx);
-        dbg!(hex::encode(pallas_codec::minicbor::to_vec(&tx).unwrap()));
+        //let tx = balius_sdk::txbuilder::build(tx.0, ledger).unwrap();
     }
 }

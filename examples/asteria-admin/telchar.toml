@@ -1,0 +1,11 @@
+# [dapp]
+# name = "@txpipe/asteria/challenge1"
+# network = "cardano/preview"
+
+[[validators]]
+blueprint = "asteria.asteria.spend"
+
+[validators.apply_parameters]
+admin_token = { policy = "abcd", name = "abcd" }
+ship_mint_lovelace_fee = 1000000
+max_asteria_mining = 1000000
