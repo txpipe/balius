@@ -33,6 +33,19 @@ fn get_project_info() -> (PathBuf, String) {
 
     let package_name = package["name"].as_str().unwrap().to_string();
 
+    let package_name = package["targets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| {
+            t["kind"]
+                .as_array()
+                .unwrap()
+                .contains(&Value::String("cdylib".to_string()))
+        })
+        .map(|t| t["name"].as_str().unwrap().to_string())
+        .unwrap_or_default();
+
     (target_directory, package_name)
 }
 
