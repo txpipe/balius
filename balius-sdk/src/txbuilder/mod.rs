@@ -1,4 +1,5 @@
 pub(crate) mod asset_math;
+pub mod plutus;
 
 #[derive(Debug, thiserror::Error)]
 pub enum BuildError {
@@ -12,6 +13,8 @@ pub enum BuildError {
     EmptyUtxoSet,
     #[error("Transaction has no inputs")]
     MalformedScript,
+    #[error("Could not decode address")]
+    MalformedAddress,
     #[error("Could not decode datum bytes")]
     MalformedDatum,
     #[error("Invalid bytes length for datum hash")]
@@ -44,6 +47,8 @@ impl From<crate::wit::balius::app::ledger::LedgerError> for BuildError {
     }
 }
 
+use std::sync::Arc;
+
 pub use pallas_codec as codec;
 pub use pallas_primitives::conway as primitives;
 pub use utxorpc_spec::utxorpc::v1alpha::cardano::PParams;
@@ -54,15 +59,25 @@ pub trait Ledger {
     fn read_params(&self) -> Result<PParams, BuildError>;
 }
 
+#[derive(Clone)]
 pub struct BuildContext {
     pub network: primitives::NetworkId,
     pub pparams: PParams,
     pub total_input: primitives::Value,
     pub spent_output: primitives::Value,
     pub estimated_fee: u64,
-    pub ledger: Box<dyn Ledger>,
+    pub ledger: Arc<Box<dyn Ledger>>,
 
     pub tx_body: Option<primitives::TransactionBody>,
+    pub parent_output: Option<primitives::TransactionOutput>,
+}
+
+impl BuildContext {
+    pub fn with_parent_output(&self, output: primitives::TransactionOutput) -> Self {
+        let mut ctx = self.clone();
+        ctx.parent_output = Some(output);
+        ctx
+    }
 }
 
 mod build;

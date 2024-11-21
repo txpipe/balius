@@ -1,6 +1,7 @@
 use pallas_primitives::conway;
 use pallas_traverse::MultiEraOutput;
 use serde::{Deserialize, Serialize};
+use serde_json::from_str;
 use serde_with::{serde_as, DisplayFromStr};
 use std::collections::{HashMap, HashSet};
 
@@ -25,7 +26,12 @@ impl UtxoSet {
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&TxoRef, MultiEraOutput<'_>)> {
-        self.0.iter().map(|(k, v)| (k, MultiEraOutput::decode(pallas_traverse::Era::Conway, v).unwrap()))
+        self.0.iter().map(|(k, v)| {
+            (
+                k,
+                MultiEraOutput::decode(pallas_traverse::Era::Conway, v).unwrap(),
+            )
+        })
     }
 
     pub fn refs(&self) -> impl Iterator<Item = &TxoRef> {
@@ -48,21 +54,6 @@ impl FromIterator<(TxoRef, Cbor)> for UtxoSet {
 impl From<HashMap<TxoRef, Cbor>> for UtxoSet {
     fn from(value: HashMap<TxoRef, Cbor>) -> Self {
         UtxoSet(value)
-    }
-}
-
-impl Ledger for UtxoSet {
-    fn read_utxos(&self, refs: &[TxoRef]) -> Result<UtxoSet, BuildError> {
-        let out: HashMap<_, _> = refs
-            .iter()
-            .filter_map(|r| self.0.get(r).map(|v| (r.clone(), v.clone())))
-            .collect();
-
-        Ok(UtxoSet(out))
-    }
-
-    fn search_utxos(&self, _pattern: &UtxoPattern) -> Result<UtxoSet, BuildError> {
-        todo!()
     }
 }
 
@@ -338,11 +329,36 @@ impl<T: ValueExpr> ValueExpr for Option<T> {
     }
 }
 
+// calculate min utxo lovelace according to spec
+// https://cips.cardano.org/cip/CIP-55
 pub struct MinUtxoLovelace;
 
 impl ValueExpr for MinUtxoLovelace {
     fn eval(&self, ctx: &BuildContext) -> Result<conway::Value, BuildError> {
-        Ok(conway::Value::Coin(ctx.pparams.min_utxo_value))
+        let parent = match &ctx.parent_output {
+            Some(x) => x,
+            None => return Ok(conway::Value::Coin(0)),
+        };
+
+        let serialized = pallas_codec::minicbor::to_vec(parent).unwrap();
+        let min_lovelace = (160u64 + serialized.len() as u64) * ctx.pparams.coins_per_utxo_byte;
+        let current_value = match parent {
+            conway::PseudoTransactionOutput::PostAlonzo(x) => &x.value,
+            _ => unimplemented!(),
+        };
+
+        let current_lovelace = asset_math::value_coin(current_value);
+
+        if current_lovelace >= min_lovelace {
+            return Ok(current_value.clone());
+        }
+
+        let optimized = asset_math::value_saturating_add_coin(
+            current_value.clone(),
+            (min_lovelace - current_lovelace) as i64,
+        );
+
+        Ok(optimized)
     }
 }
 
@@ -365,6 +381,18 @@ impl<T: ValueExpr> ValueExpr for Vec<T> {
 
 pub trait AddressExpr: 'static + Send + Sync {
     fn eval(&self, ctx: &BuildContext) -> Result<Address, BuildError>;
+}
+
+impl AddressExpr for &'static str {
+    fn eval(&self, _ctx: &BuildContext) -> Result<Address, BuildError> {
+        Address::from_bech32(*self).map_err(|_| BuildError::MalformedAddress)
+    }
+}
+
+impl AddressExpr for String {
+    fn eval(&self, _ctx: &BuildContext) -> Result<Address, BuildError> {
+        Address::from_bech32(self).map_err(|_| BuildError::MalformedAddress)
+    }
 }
 
 impl AddressExpr for Address {
@@ -398,7 +426,7 @@ where
 }
 
 pub trait OutputExpr: 'static + Send + Sync {
-    fn eval(&self, ctx: &BuildContext) -> Result<conway::TransactionOutput, BuildError>;
+    fn eval(&mut self, ctx: &BuildContext) -> Result<conway::TransactionOutput, BuildError>;
 }
 
 pub struct ChangeAddress(pub UtxoSource);
@@ -439,7 +467,7 @@ impl ValueExpr for TotalChange {
 pub struct FeeChangeReturn(pub UtxoSource);
 
 impl OutputExpr for FeeChangeReturn {
-    fn eval(&self, ctx: &BuildContext) -> Result<conway::TransactionOutput, BuildError> {
+    fn eval(&mut self, ctx: &BuildContext) -> Result<conway::TransactionOutput, BuildError> {
         OutputBuilder::new()
             .address(ChangeAddress(self.0.clone()))
             .with_value(TotalChange)
@@ -574,12 +602,29 @@ impl MintExpr for MintBuilder {
     }
 }
 
+pub trait ScriptExpr: 'static + Send + Sync {
+    fn eval(&self, ctx: &BuildContext) -> Result<conway::ScriptRef, BuildError>;
+}
+
+impl ScriptExpr for conway::ScriptRef {
+    fn eval(&self, _ctx: &BuildContext) -> Result<conway::ScriptRef, BuildError> {
+        Ok(self.clone())
+    }
+}
+
+impl ScriptExpr for conway::PlutusScript<3> {
+    fn eval(&self, _ctx: &BuildContext) -> Result<conway::ScriptRef, BuildError> {
+        Ok(conway::ScriptRef::PlutusV3Script(self.clone()))
+    }
+}
+
 #[derive(Default)]
 pub struct OutputBuilder {
+    pub previous: Option<conway::TransactionOutput>,
     pub address: Option<Box<dyn dsl::AddressExpr>>,
     pub values: Vec<Box<dyn dsl::ValueExpr>>,
+    pub script: Option<Box<dyn ScriptExpr>>,
     // TODO: inline / hash datum
-    // TODO: script
 }
 
 impl OutputBuilder {
@@ -596,42 +641,65 @@ impl OutputBuilder {
         self.values.push(Box::new(value));
         self
     }
+
+    pub fn with_script(mut self, script: impl ScriptExpr + 'static) -> Self {
+        self.script = Some(Box::new(script));
+        self
+    }
 }
 
 impl OutputExpr for OutputBuilder {
-    fn eval(&self, ctx: &BuildContext) -> Result<conway::TransactionOutput, BuildError> {
-        Ok(conway::TransactionOutput::PostAlonzo(
-            conway::PostAlonzoTransactionOutput {
-                address: self.address.eval(ctx)?.to_vec().into(),
-                value: self.values.eval(ctx)?,
-                datum_option: None, // TODO
-                script_ref: None,   // TODO
-            },
-        ))
+    fn eval(&mut self, ctx: &BuildContext) -> Result<conway::TransactionOutput, BuildError> {
+        let ctx = match &self.previous {
+            Some(x) => &ctx.with_parent_output(x.clone()),
+            None => ctx,
+        };
+
+        let value = self.values.eval(ctx)?;
+
+        let address = self.address.eval(ctx)?.to_vec().into();
+
+        let script_ref = self
+            .script
+            .as_ref()
+            .map(|s| s.eval(ctx))
+            .transpose()?
+            .map(pallas_codec::utils::CborWrap);
+
+        let output = conway::TransactionOutput::PostAlonzo(conway::PostAlonzoTransactionOutput {
+            value,
+            address,
+            script_ref,
+            datum_option: None, // TODO
+        });
+
+        self.previous = Some(output.clone());
+
+        Ok(output)
     }
 }
 
 pub trait TxExpr: 'static + Send + Sync {
-    fn eval_body(&self, ctx: &BuildContext) -> Result<conway::TransactionBody, BuildError>;
-    fn eval_witness_set(&self, ctx: &BuildContext) -> Result<conway::WitnessSet, BuildError>;
+    fn eval_body(&mut self, ctx: &BuildContext) -> Result<conway::TransactionBody, BuildError>;
+    fn eval_witness_set(&mut self, ctx: &BuildContext) -> Result<conway::WitnessSet, BuildError>;
 }
 
-impl<T: TxExpr> TxExpr for &'static T {
-    fn eval_body(&self, ctx: &BuildContext) -> Result<conway::TransactionBody, BuildError> {
+impl<T: TxExpr> TxExpr for &'static mut T {
+    fn eval_body(&mut self, ctx: &BuildContext) -> Result<conway::TransactionBody, BuildError> {
         (**self).eval_body(ctx)
     }
 
-    fn eval_witness_set(&self, ctx: &BuildContext) -> Result<conway::WitnessSet, BuildError> {
+    fn eval_witness_set(&mut self, ctx: &BuildContext) -> Result<conway::WitnessSet, BuildError> {
         (**self).eval_witness_set(ctx)
     }
 }
 
 impl TxExpr for Box<dyn TxExpr> {
-    fn eval_body(&self, ctx: &BuildContext) -> Result<conway::TransactionBody, BuildError> {
+    fn eval_body(&mut self, ctx: &BuildContext) -> Result<conway::TransactionBody, BuildError> {
         (**self).eval_body(ctx)
     }
 
-    fn eval_witness_set(&self, ctx: &BuildContext) -> Result<conway::WitnessSet, BuildError> {
+    fn eval_witness_set(&mut self, ctx: &BuildContext) -> Result<conway::WitnessSet, BuildError> {
         (**self).eval_witness_set(ctx)
     }
 }
@@ -641,9 +709,8 @@ pub struct TxBuilder {
     pub reference_inputs: Vec<Box<dyn InputExpr>>,
     pub inputs: Vec<Box<dyn InputExpr>>,
     pub outputs: Vec<Box<dyn OutputExpr>>,
-    // pub outputs: Option<Vec<Output>>,
-    // pub fee: Option<u64>,
     pub mint: Vec<Box<dyn MintExpr>>,
+    pub fee: Option<u64>,
     // pub valid_from_slot: Option<u64>,
     // pub invalid_from_slot: Option<u64>,
     // pub network_id: Option<u8>,
@@ -688,10 +755,15 @@ impl TxBuilder {
         self.mint.push(Box::new(mint));
         self
     }
+
+    pub fn with_fee(mut self, fee: u64) -> Self {
+        self.fee = Some(fee);
+        self
+    }
 }
 
 impl TxExpr for TxBuilder {
-    fn eval_body(&self, ctx: &BuildContext) -> Result<conway::TransactionBody, BuildError> {
+    fn eval_body(&mut self, ctx: &BuildContext) -> Result<conway::TransactionBody, BuildError> {
         let out = conway::TransactionBody {
             inputs: self
                 .inputs
@@ -704,7 +776,7 @@ impl TxExpr for TxBuilder {
                 .into(),
             outputs: self
                 .outputs
-                .iter()
+                .iter_mut()
                 .map(|o| o.eval(ctx))
                 .collect::<Result<Vec<_>, _>>()?,
             fee: ctx.estimated_fee,
@@ -751,7 +823,7 @@ impl TxExpr for TxBuilder {
         Ok(out)
     }
 
-    fn eval_witness_set(&self, ctx: &BuildContext) -> Result<conway::WitnessSet, BuildError> {
+    fn eval_witness_set(&mut self, ctx: &BuildContext) -> Result<conway::WitnessSet, BuildError> {
         let out = conway::WitnessSet {
             redeemer: {
                 let redeemers: Vec<_> = self
