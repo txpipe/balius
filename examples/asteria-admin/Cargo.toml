@@ -1,0 +1,32 @@
+[package]
+name = "asteria-admin"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+balius-sdk = { path = "../../balius-sdk" }
+hex = "0.4.3"
+pallas-primitives = "0.31.0"
+serde = { version = "1.0.204", features = ["derive"] }
+
+[lib]
+crate-type = ["cdylib"]
+
+[build-dependencies]
+hex-literal = "0.4.1"
+balius-sdk = { path = "../../balius-sdk" }
+cargo_metadata = "0.18.1"
+convert_case = "0.6.0"
+prettyplease = "0.2.25"
+proc-macro2 = "1.0.89"
+quote = "1.0.37"
+serde = { version = "1.0.204", features = ["derive"] }
+serde_json = "1.0.133"
+syn = "2.0.87"
+toml = "0.8.19"
+# uplc = { git = "https://github.com/pragma-org/uplc" }
+uplc = { version = "*" }
+hex = "0.4.3"
+serde_with = { version = "3.11.0", features = ["hex"] }

@@ -1,0 +1,34 @@
+[rpc]
+listen_address = "0.0.0.0:3000"
+
+[logging]
+max_level = "debug"
+include_tokio = true
+
+[ledger]
+endpoint_url = "https://preview.utxorpc-v0.demeter.run"
+api_key = "utxorpc1gk0xe296vd5q567uug5"
+
+[chainsync]
+endpoint_url = "https://preview.utxorpc-v0.demeter.run"
+api_key = "utxorpc1gk0xe296vd5q567uug5"
+
+[[workers]]
+name = "faucet"
+module = "../bin/faucet.wasm"
+config = "faucet.json"
+
+[[workers]]
+name = "wallet"
+module = "../bin/wallet.wasm"
+config = "wallet.json"
+
+[[workers]]
+name = "asteria"
+module = "../bin/asteria.wasm"
+config = "asteria.json"
+
+[[workers]]
+name = "telchar"
+module = "../bin/telchar.wasm"
+config = "telchar.json"

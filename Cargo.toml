@@ -8,6 +8,8 @@ members = [
     # "examples/ticket-vending-machine",
     "examples/minter/offchain",
     "examples/wallet/offchain",
+    "examples/asteria-admin",
+    "examples/telchar",
     "balius-sdk",
     "balius-runtime",
     "balius-macros",
