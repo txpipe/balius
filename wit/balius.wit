@@ -2,7 +2,11 @@ package balius:app@0.1.0;
 
 interface kv {
     type payload = list<u8>;
-    type kv-error = u32;
+    variant kv-error {
+        upstream(string),
+        internal(string),
+        not-found(string)
+    }
   
     get-value: func(key: string) -> result<payload, kv-error>;
     set-value: func(key: string, value: payload) -> result<_, kv-error>;
