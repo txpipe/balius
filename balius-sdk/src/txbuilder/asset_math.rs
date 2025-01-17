@@ -143,6 +143,13 @@ pub fn subtract_value(lhs: &Value, rhs: &Value) -> Result<Value, BuildError> {
     }
 }
 
+pub fn value_coin(value: &Value) -> u64 {
+    match value {
+        Value::Coin(x) => *x,
+        Value::Multiasset(x, _) => *x,
+    }
+}
+
 fn try_to_mint<F>(
     assets: conway::Multiasset<PositiveCoin>,
     f: F,
