@@ -17,6 +17,8 @@ pub enum Error {
     BadUtxo,
     #[error("event mismatch, expected {0}")]
     EventMismatch(String),
+    #[error("kv error: {0}")]
+    KV(wit::balius::app::kv::KvError),
     #[error("ledger error: {0}")]
     Ledger(wit::balius::app::ledger::LedgerError),
 }
@@ -35,6 +37,10 @@ impl From<Error> for wit::HandleError {
             Error::BadParams => wit::HandleError {
                 code: 2,
                 message: "bad params".to_owned(),
+            },
+            Error::KV(err) => wit::HandleError {
+                code: 3,
+                message: err.to_string(),
             },
             Error::Ledger(err) => wit::HandleError {
                 code: 4,
@@ -55,6 +61,12 @@ impl From<Error> for wit::HandleError {
 impl From<serde_json::Error> for Error {
     fn from(error: serde_json::Error) -> Self {
         Error::Internal(error.to_string())
+    }
+}
+
+impl From<wit::balius::app::kv::KvError> for Error {
+    fn from(error: wit::balius::app::kv::KvError) -> Self {
+        Error::KV(error)
     }
 }
 
