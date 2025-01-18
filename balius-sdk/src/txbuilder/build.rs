@@ -114,6 +114,9 @@ where
     let utxos = ctx.ledger.read_utxos(&input_refs)?;
     ctx.total_input =
         asset_math::aggregate_values(utxos.txos().map(|txo| input_into_conway(&txo.value())));
+    if let Some(mint) = &body.mint {
+        ctx.total_input = asset_math::add_mint(&ctx.total_input, mint)?;
+    }
     ctx.spent_output = asset_math::aggregate_values(body.outputs.iter().map(output_into_conway));
     // TODO: estimate the fee
     ctx.estimated_fee = 2_000_000;
@@ -155,7 +158,7 @@ fn input_into_conway(value: &MultiEraValue) -> primitives::Value {
                             .iter()
                             .filter_map(|(k, v)| Some((k.clone(), (*v).try_into().ok()?)))
                             .collect();
-                        Some((k.clone(), conway::NonEmptyKeyValuePairs::from_vec(v)?))
+                        Some((*k, conway::NonEmptyKeyValuePairs::from_vec(v)?))
                     })
                     .collect();
                 if let Some(assets) = conway::NonEmptyKeyValuePairs::from_vec(assets) {
@@ -183,7 +186,7 @@ fn output_into_conway(output: &primitives::TransactionOutput) -> primitives::Val
                             .iter()
                             .filter_map(|(k, v)| Some((k.clone(), (*v).try_into().ok()?)))
                             .collect();
-                        Some((k.clone(), conway::NonEmptyKeyValuePairs::from_vec(v)?))
+                        Some((*k, conway::NonEmptyKeyValuePairs::from_vec(v)?))
                     })
                     .collect();
                 if let Some(assets) = conway::NonEmptyKeyValuePairs::from_vec(assets) {

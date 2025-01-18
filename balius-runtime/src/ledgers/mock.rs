@@ -1,5 +1,3 @@
-use serde_json::json;
-
 use crate::wit::balius::app::ledger as wit;
 
 #[derive(Clone)]
@@ -41,8 +39,7 @@ impl Ledger {
     }
 
     pub async fn read_params(&mut self) -> Result<wit::Json, wit::LedgerError> {
-        let json = json!({ "param1": 4 });
-        let bytes = serde_json::to_vec(&json).unwrap();
+        let bytes = include_bytes!("./mock_pparams.json");
         Ok(bytes.into())
     }
 }

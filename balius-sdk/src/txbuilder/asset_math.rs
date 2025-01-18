@@ -3,7 +3,7 @@ use pallas_primitives::{
     conway::{self, Value},
     AssetName, NonEmptyKeyValuePairs, NonZeroInt, PolicyId, PositiveCoin,
 };
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{hash_map::Entry, BTreeMap, HashMap};
 
 use super::BuildError;
 
@@ -85,6 +85,49 @@ pub fn aggregate_values(items: impl IntoIterator<Item = Value>) -> Value {
         Value::Multiasset(total_coin, total_assets)
     } else {
         Value::Coin(total_coin)
+    }
+}
+
+pub fn add_mint(value: &Value, mint: &conway::Mint) -> Result<Value, BuildError> {
+    let (coin, mut og_assets) = match value {
+        Value::Coin(c) => (*c, BTreeMap::new()),
+        Value::Multiasset(c, a) => {
+            let flattened: BTreeMap<&PolicyId, BTreeMap<&AssetName, u64>> = a
+                .iter()
+                .map(|(policy, assets)| {
+                    let values = assets
+                        .iter()
+                        .map(move |(name, value)| (name, value.into()))
+                        .collect();
+                    (policy, values)
+                })
+                .collect();
+            (*c, flattened)
+        }
+    };
+    let mut final_assets = vec![];
+    for (policy, mint_assets) in mint.iter() {
+        let assets = og_assets.remove(policy).unwrap_or_default();
+        let mut policy_assets = vec![];
+        for (name, value) in mint_assets.iter() {
+            let old_value = assets.get(name).copied().unwrap_or_default();
+            let minted: i64 = value.into();
+            let Some(new_value) = old_value.checked_add_signed(minted) else {
+                return Err(BuildError::OutputsTooHigh);
+            };
+            if let Ok(asset) = PositiveCoin::try_from(new_value) {
+                policy_assets.push((name.clone(), asset));
+            }
+        }
+        if let Some(assets) = NonEmptyKeyValuePairs::from_vec(policy_assets) {
+            final_assets.push((policy.clone(), assets));
+        }
+    }
+
+    if let Some(assets) = NonEmptyKeyValuePairs::from_vec(final_assets) {
+        Ok(Value::Multiasset(coin, assets))
+    } else {
+        Ok(Value::Coin(coin))
     }
 }
 

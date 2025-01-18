@@ -25,3 +25,5 @@ prost = "0.13"
 
 [dev-dependencies]
 tokio = "1.40.0"
+wat = "1"
+wit-component = "0.223"

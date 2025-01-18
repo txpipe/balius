@@ -81,7 +81,7 @@ mod tests {
         .into_iter()
         .collect();
 
-        let ledger = UtxoSet::from(test_utxos);
+        let _ledger = UtxoSet::from(test_utxos);
 
         let config = FaucetConfig {
             validator: ReferenceScript {
@@ -106,7 +106,7 @@ mod tests {
 
         dbg!(serde_json::to_string(&request).unwrap());
 
-        let tx = claim(Config(config), Params(request)).unwrap();
+        let _tx = claim(Config(config), Params(request)).unwrap();
 
         //let tx = balius_sdk::txbuilder::build(tx.0, ledger).unwrap();
     }
