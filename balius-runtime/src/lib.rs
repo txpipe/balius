@@ -136,6 +136,11 @@ pub enum Tx {
 }
 
 impl Tx {
+    pub fn hash(&self) -> Vec<u8> {
+        match self {
+            Self::Cardano(tx) => tx.hash.clone().into(),
+        }
+    }
     pub fn outputs(&self) -> Vec<Utxo> {
         match self {
             Self::Cardano(tx) => tx
@@ -153,6 +158,16 @@ pub enum Block {
 }
 
 impl Block {
+    pub fn hash(&self) -> Vec<u8> {
+        match self {
+            Self::Cardano(block) => block.header.as_ref().unwrap().hash.clone().into(),
+        }
+    }
+    pub fn height(&self) -> u64 {
+        match self {
+            Self::Cardano(block) => block.header.as_ref().unwrap().height,
+        }
+    }
     pub fn txs(&self) -> Vec<Tx> {
         match self {
             Self::Cardano(block) => block
@@ -245,11 +260,23 @@ impl LoadedWorker {
     }
 
     async fn apply_block(&mut self, block: &Block) -> Result<(), Error> {
+        let block_hash = block.hash();
+        let block_height = block.height();
         for tx in block.txs() {
-            for utxo in tx.outputs() {
+            let tx_hash = tx.hash();
+            for (index, utxo) in tx.outputs().into_iter().enumerate() {
                 let channels = self.wasm_store.data().router.find_utxo_targets(&utxo)?;
+                if channels.is_empty() {
+                    continue;
+                }
 
-                let event = wit::Event::Utxo(utxo.to_bytes());
+                let event = wit::Event::Utxo(wit::balius::app::driver::Utxo {
+                    block_hash: block_hash.clone(),
+                    block_height,
+                    tx_hash: tx_hash.clone(),
+                    index: index as u64,
+                    utxo: utxo.to_bytes(),
+                });
 
                 for channel in channels {
                     self.acknowledge_event(channel, &event).await?;
@@ -261,11 +288,23 @@ impl LoadedWorker {
     }
 
     async fn undo_block(&mut self, block: &Block) -> Result<(), Error> {
+        let block_hash = block.hash();
+        let block_height = block.height();
         for tx in block.txs() {
-            for utxo in tx.outputs() {
+            let tx_hash = tx.hash();
+            for (index, utxo) in tx.outputs().into_iter().enumerate() {
                 let channels = self.wasm_store.data().router.find_utxo_targets(&utxo)?;
+                if channels.is_empty() {
+                    continue;
+                }
 
-                let event = wit::Event::UtxoUndo(utxo.to_bytes());
+                let event = wit::Event::UtxoUndo(wit::balius::app::driver::Utxo {
+                    block_hash: block_hash.clone(),
+                    block_height,
+                    tx_hash: tx_hash.clone(),
+                    index: index as u64,
+                    utxo: utxo.to_bytes(),
+                });
 
                 for channel in channels {
                     self.acknowledge_event(channel, &event).await?;

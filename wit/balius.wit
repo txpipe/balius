@@ -78,9 +78,17 @@ interface driver {
     type timestamp = u64;
     type params = json;
 
+    record utxo {
+        block-hash: list<u8>,
+        block-height: u64,
+        tx-hash: list<u8>,
+        index: u64,
+        utxo: cbor,
+    }
+
     variant event {
-        utxo(cbor),
-        utxo-undo(cbor),
+        utxo(utxo),
+        utxo-undo(utxo),
         timer(timestamp),
         request(params),
         message(json),
