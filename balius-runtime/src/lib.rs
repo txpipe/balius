@@ -271,11 +271,15 @@ impl LoadedWorker {
                 }
 
                 let event = wit::Event::Utxo(wit::balius::app::driver::Utxo {
-                    block_hash: block_hash.clone(),
-                    block_height,
-                    tx_hash: tx_hash.clone(),
-                    index: index as u64,
-                    utxo: utxo.to_bytes(),
+                    block: wit::balius::app::driver::BlockRef {
+                        block_hash: block_hash.clone(),
+                        block_height,
+                    },
+                    body: utxo.to_bytes(),
+                    ref_: wit::balius::app::driver::TxoRef {
+                        tx_hash: tx_hash.clone(),
+                        txo_index: index as u32,
+                    },
                 });
 
                 for channel in channels {
@@ -299,11 +303,15 @@ impl LoadedWorker {
                 }
 
                 let event = wit::Event::UtxoUndo(wit::balius::app::driver::Utxo {
-                    block_hash: block_hash.clone(),
-                    block_height,
-                    tx_hash: tx_hash.clone(),
-                    index: index as u64,
-                    utxo: utxo.to_bytes(),
+                    block: wit::balius::app::driver::BlockRef {
+                        block_hash: block_hash.clone(),
+                        block_height,
+                    },
+                    body: utxo.to_bytes(),
+                    ref_: wit::balius::app::driver::TxoRef {
+                        tx_hash: tx_hash.clone(),
+                        txo_index: index as u32,
+                    },
                 });
 
                 for channel in channels {

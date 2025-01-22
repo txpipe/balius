@@ -240,11 +240,11 @@ impl<D> TryFrom<wit::Event> for Utxo<D> {
             _ => return Err(Error::EventMismatch("utxo|utxoundo".to_owned())),
         };
 
-        let block_hash = utxo.block_hash;
-        let block_height = utxo.block_height;
-        let tx_hash = utxo.tx_hash;
-        let index = utxo.index;
-        let utxo = Message::decode(utxo.utxo.as_slice()).map_err(|_| Self::Error::BadUtxo)?;
+        let block_hash = utxo.block.block_hash;
+        let block_height = utxo.block.block_height;
+        let tx_hash = utxo.ref_.tx_hash;
+        let index = utxo.ref_.txo_index as u64;
+        let utxo = Message::decode(utxo.body.as_slice()).map_err(|_| Self::Error::BadUtxo)?;
 
         Ok(Utxo {
             block_hash,

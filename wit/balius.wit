@@ -78,12 +78,20 @@ interface driver {
     type timestamp = u64;
     type params = json;
 
-    record utxo {
+    record txo-ref {
+        tx-hash: list<u8>,
+        txo-index: u32,
+    }
+
+    record block-ref {
         block-hash: list<u8>,
         block-height: u64,
-        tx-hash: list<u8>,
-        index: u64,
-        utxo: cbor,
+    }
+
+    record utxo {
+        body: cbor,
+        ref: txo-ref,
+        block: block-ref,
     }
 
     variant event {
