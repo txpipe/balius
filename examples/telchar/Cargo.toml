@@ -13,3 +13,6 @@ serde = { version = "1.0.204", features = ["derive"] }
 
 [lib]
 crate-type = ["cdylib"]
+
+[package.metadata.release]
+release = false

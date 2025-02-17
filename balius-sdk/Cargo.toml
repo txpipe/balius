@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 utxorpc-spec = { version = "0.12.0", features = ["ledgers"], default-features = false }
-balius-macros = { version = "0.1.0", path = "../balius-macros" }
+balius-macros = { path = "../balius-macros" }
 hex = "0.4.3"
 pallas-addresses = { version = "0.31.0" }
 pallas-codec = { version = "0.31.0" }

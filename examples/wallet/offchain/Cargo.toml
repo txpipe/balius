@@ -17,3 +17,6 @@ crate-type = ["cdylib"]
 serde_json = "1.0.128"
 pallas-primitives = "0.31.0"
 pallas-traverse = "0.31.0"
+
+[package.metadata.release]
+release = false

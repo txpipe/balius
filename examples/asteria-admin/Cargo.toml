@@ -30,3 +30,6 @@ toml = "0.8.19"
 uplc = { version = "*" }
 hex = "0.4.3"
 serde_with = { version = "3.11.0", features = ["hex"] }
+
+[package.metadata.release]
+release = false
