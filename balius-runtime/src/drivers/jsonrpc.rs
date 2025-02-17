@@ -75,8 +75,8 @@ pub async fn handle_request(
             let x = match x {
                 wit::Response::Acknowledge => json!({}),
                 wit::Response::Json(x) => serde_json::from_slice(&x).unwrap(),
-                wit::Response::Cbor(x) => json!({ "cbor": x }),
-                wit::Response::PartialTx(x) => json!({ "tx": x }),
+                wit::Response::Cbor(x) => json!({ "cbor": hex::encode(x) }),
+                wit::Response::PartialTx(x) => json!({ "tx": hex::encode(x) }),
             };
 
             warp::reply::json(&x)
