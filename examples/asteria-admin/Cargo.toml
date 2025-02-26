@@ -17,8 +17,8 @@ crate-type = ["cdylib"]
 [build-dependencies]
 hex-literal = "0.4.1"
 balius-sdk = { path = "../../balius-sdk" }
-cargo_metadata = "0.18.1"
-convert_case = "0.6.0"
+cargo_metadata = "0.19.1"
+convert_case = "0.7.1"
 prettyplease = "0.2.25"
 proc-macro2 = "1.0.89"
 quote = "1.0.37"
