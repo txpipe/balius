@@ -270,10 +270,16 @@ dependencies = [
 name = "balius"
 version = "0.3.0"
 dependencies = [
+ "balius-runtime",
  "clap",
  "fs_extra",
  "inquire",
+ "miette 7.2.0",
  "serde_json",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
