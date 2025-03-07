@@ -84,10 +84,8 @@ async fn run_project_with_config(
     project_name: &str,
     config_path: Option<PathBuf>,
     port: u16,
-    ledger_url: String,
-    ledger_api_key: String,
-    chainsync_url: String,
-    chainsync_api_key: String
+    utxo_url: String,
+    utxo_api_key: String
 ) -> miette::Result<()> {
     setup_tracing()?;
 
@@ -98,8 +96,8 @@ async fn run_project_with_config(
         
     let ledger = ledgers::u5c::Ledger::new({
         ledgers::u5c::Config {
-            endpoint_url: ledger_url,
-            api_key: ledger_api_key
+            endpoint_url: utxo_url.clone(),
+            api_key: utxo_api_key.clone()
         }
     }).await
     .into_diagnostic()
@@ -134,8 +132,8 @@ async fn run_project_with_config(
 
     let chainsync_driver = tokio::spawn(balius_runtime::drivers::chainsync::run(
         balius_runtime::drivers::chainsync::Config {
-            endpoint_url: chainsync_url,
-            api_key: chainsync_api_key
+            endpoint_url: utxo_url.clone(),
+            api_key: utxo_api_key.clone()
         },
         runtime.clone(),
         cancel.clone(),
@@ -152,10 +150,8 @@ async fn run_project_with_config(
 pub async fn execute(
     config_path: Option<String>,
     port: u16,
-    ledger_url: String,
-    ledger_api_key: String,
-    chainsync_url: String,
-    chainsync_api_key: String
+    utxo_url: String,
+    utxo_api_key: String,
 ) {
     let (_, package_name) = get_project_info();
 
@@ -166,10 +162,8 @@ pub async fn execute(
         &package_name,
         config_path_buf,
         port,
-        ledger_url,
-        ledger_api_key,
-        chainsync_url,
-        chainsync_api_key
+        utxo_url,
+        utxo_api_key,
     ).await;
     if result.is_err() {
         info!("Error running project: {}", result.err().unwrap());

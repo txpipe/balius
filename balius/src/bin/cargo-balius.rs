@@ -17,28 +17,20 @@ enum BaliusCommand {
     #[command(arg_required_else_help = true)]
     Test {
         /// Path to a custom configuration file
-        #[arg(short, long)]
+        #[arg(short, long, env = "WASM_CONFIG_PATH")]
         config: Option<String>,
         
         /// Port to use for the JSON-RPC server
         #[arg(short, long, default_value = "3000", env = "PORT")]
         port: u16,
 
-        /// Ledger endpoint URL
-        #[arg(long, default_value = "https://preview.utxorpc-v0.demeter.run", env = "LEDGER_URL")]
-        ledger_url: String,
+        /// UTXoRCP endpoint URL
+        #[arg(long, env = "UTXO_URL")]
+        utxo_url: String,
 
-        /// Ledger API key
-        #[arg(long, env = "LEDGER_API_KEY")]
-        ledger_api_key: String,
-
-        /// Chainsync endpoint URL
-        #[arg(long, default_value = "https://preview.utxorpc-v0.demeter.run", env = "CHAINSYNC_URL")]
-        chainsync_url: String,
-
-        /// Chainsync API key
-        #[arg(long, env = "CHAINSYNC_API_KEY")]
-        chainsync_api_key: String,
+        /// UTXoRCP API key
+        #[arg(long, env = "UTXO_API_KEY")]
+        utxo_api_key: String,
     },
 }
 
@@ -58,17 +50,13 @@ async fn main() {
         BaliusCommand::Test {
             config,
             port,
-            ledger_url,
-            ledger_api_key,
-            chainsync_url,
-            chainsync_api_key,
+            utxo_url,
+            utxo_api_key,
         } => command::test::execute(
             config,
             port,
-            ledger_url,
-            ledger_api_key,
-            chainsync_url,
-            chainsync_api_key
+            utxo_url,
+            utxo_api_key
         ).await,
     }
 }
