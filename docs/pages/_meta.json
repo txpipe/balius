@@ -9,7 +9,12 @@
   },
   "introduction": "Introduction",
   "quickstart": "Quickstart",
-  "cli": "CLI",
+  "-- Tools --": {
+    "type": "separator",
+    "title": "Tools"
+  },
+  "balius": "Balius Plugin",
+  "baliusd": "Balius Daemon",
   "-- Reference --": {
     "type": "separator",
     "title": "Reference"

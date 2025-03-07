@@ -63,7 +63,7 @@ Response: Serialized orders
 ```
 
 ## Implementation with Balius
-In this section, we will review the key aspects of Balius by implementing the previous specification. Because many aspects of the implementation are repetitive, and the goal is to be concise, we will only show some parts of the final code, but the complete implementation can be found [here](https://github.com/txpipe/oura/blob/main/example).
+In this section, we will review the key aspects of Balius by implementing the previous specification. Because many aspects of the implementation are repetitive, and the goal is to be concise, we will only show some parts of the final code, but the complete implementation can be found [here](https://github.com/txpipe/balius/blob/main/examples/order-book).
 
 This dApp will need to address two types of events: Those triggered by a user action and those by the blockchain. [Balius supports four types of events](/events). The relevant ones for this example will be the [`Request`](/events#request-event) event and the [`Chain`](/events#chain-event) event.
 Before entering into the details of these two events, we can quickly mention that the remaining events are [`PubSub`](/events#pubsub-event) and [`Timer`](/events#timer-event) events. The `PubSub` event can be thought of as similar to the `Request` event but without expecting any response, and the `Timer` event, as its name suggests, helps us to setup a recurring action to be performed by some function.
