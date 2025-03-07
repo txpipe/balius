@@ -5,15 +5,34 @@ version = "0.2.0"
 edition = "2021"
 
 [dependencies]
+aws-config = { version = "1.5.18" }
+aws-sdk-s3 = { version = "1.78.0" }
 balius-runtime = { version = "0.2.0", path = "../balius-runtime" }
-gasket = { version = "0.8.0", features = ["derive"] }
+config = { version = "0.15.9", default-features = false, features = ["toml", "json"] }
+console-subscriber = { version = "0.4.1", optional = true }
+futures-util = { version = "0.3.31" }
+gasket = { version = "0.9.0", features = ["derive"] }
+k8s-openapi = { version = "0.24.0", features = ["latest"] }
+kube = { version = "0.98.0", features = ["client", "runtime", "derive"] }
 miette = { version = "7.2.0", features = ["fancy"] }
+schemars = { version = "0.8.22" }
 serde = { version = "1.0.213", features = ["derive"] }
 serde_json = "1.0.132"
 serde_with = "3.11.0"
+serde_yaml ={ version = "0.9.34" }
 tokio = { version = "1.41.0", features = ["rt-multi-thread", "signal"] }
 tokio-macros = "2.4.0"
 tokio-util = "0.7.12"
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
-config = { version = "0.13.3", default-features = false, features = ["toml", "json"] }
+
+[features]
+debug = ["console-subscriber"]
+
+[[bin]]
+name = "baliusd"
+path = "src/bin/main.rs"
+
+[[bin]]
+name = "crdgen"
+path = "src/bin/crdgen.rs"

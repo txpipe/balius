@@ -136,6 +136,7 @@ impl Ledger {
                 "unexpected response from read_params".to_string(),
             ))?;
 
+        #[allow(unreachable_patterns)]
         match params {
             utxorpc::spec::query::any_chain_params::Params::Cardano(params) => {
                 Ok(serde_json::to_vec(&params).unwrap())

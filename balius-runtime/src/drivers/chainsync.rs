@@ -8,6 +8,7 @@ use crate::{Block, ChainPoint, Error, Runtime};
 
 impl From<ChainPoint> for utxorpc::spec::sync::BlockRef {
     fn from(point: ChainPoint) -> Self {
+        #[allow(unreachable_patterns)]
         match point {
             ChainPoint::Cardano(x) => x.clone(),
             _ => todo!(),

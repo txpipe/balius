@@ -2,7 +2,7 @@ use router::Router;
 use std::{collections::HashMap, path::Path, sync::Arc};
 use thiserror::Error;
 use tokio::sync::Mutex;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 use utxorpc::spec::sync::BlockRef;
 
 mod wit {
@@ -104,7 +104,7 @@ impl From<redb::StorageError> for Error {
 
 impl From<pallas::ledger::addresses::Error> for Error {
     fn from(value: pallas::ledger::addresses::Error) -> Self {
-        Self::BadAddress(value.into())
+        Self::BadAddress(value)
     }
 }
 
@@ -361,8 +361,7 @@ impl Runtime {
             .lock()
             .await
             .values()
-            .map(|w| w.cursor)
-            .flatten()
+            .flat_map(|w| w.cursor)
             .min();
 
         if let Some(seq) = lowest_seq {
@@ -374,7 +373,7 @@ impl Runtime {
     }
 
     pub async fn register_worker(
-        &mut self,
+        &self,
         id: &str,
         wasm_path: impl AsRef<Path>,
         config: serde_json::Value,
