@@ -1,6 +1,5 @@
 use std::fs;
 use std::path::Path;
-use inquire::Text;
 
 // Include template files at compile time
 const TEMPLATE_CARGO_TOML: &str = include_str!("templates/cargo.toml.template");
@@ -70,17 +69,18 @@ fn create_project(project_name: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-pub fn execute() {
-    println!("Initializing Balius project...");
-    
-    // Ask for project name without default value
-    let input_name = match Text::new("Project name:").prompt() {
-        Ok(name) if !name.trim().is_empty() => name,
-        _ => {
-            eprintln!("Error: Project name is required");
-            return;
-        }
+pub fn execute(args: Vec<String>) {    
+    // Process input name from command line arguments
+    let input_name = if args.is_empty() {
+        eprintln!("Error: Project name is required");
+        eprintln!("Usage: cargo balius init <project-name>");
+        return;
+    } else {
+        // Join all arguments with spaces to form the project name
+        args.join(" ")
     };
+
+    println!("Initializing Balius project...");
 
     let project_name = sanitize_string(&input_name);
     

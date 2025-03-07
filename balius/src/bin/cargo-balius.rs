@@ -4,8 +4,16 @@ mod command;
 
 #[derive(Debug, Parser)]
 enum BaliusCommand {
+    /// Build the Balius project
     Build,
-    Init,
+    /// Initialize a new Balius project
+    #[command(trailing_var_arg = true)]
+    Init {
+        /// Project name
+        #[arg(allow_hyphen_values = false)]
+        project_name: Vec<String>,
+    },
+    /// Run the Balius test server
     #[command(arg_required_else_help = true)]
     Test {
         /// Path to a custom configuration file
@@ -46,7 +54,7 @@ async fn main() {
 
     match args.command {
         BaliusCommand::Build => command::build::execute(),
-        BaliusCommand::Init => command::init::execute(),
+        BaliusCommand::Init { project_name } => command::init::execute(project_name),
         BaliusCommand::Test {
             config,
             port,
