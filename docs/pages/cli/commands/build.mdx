@@ -1,0 +1,43 @@
+# Build Command
+
+The `build` command compiles your Balius project into a WebAssembly component that can be executed by the Balius runtime.
+
+## Usage
+
+```bash
+cargo balius build
+```
+
+## Process
+
+The `build` command performs the following steps:
+
+1. Executes `cargo build` with the `wasm32-unknown-unknown` target
+2. Converts the generated `.wasm` file into a WebAssembly component using `wasm-tools`
+
+## What It Does
+
+This command:
+
+1. Compiles your project to WebAssembly targeting `wasm32-unknown-unknown`
+2. Locates the built `.wasm` file in your target directory
+3. Uses `wasm-tools` to convert it into a component WebAssembly file with the name format `{package_name}-c.wasm`
+
+## Requirements
+
+- WebAssembly target support in your Rust toolchain (install with `rustup target add wasm32-unknown-unknown`)
+- The `wasm-tools` command-line utility must be installed in your path
+
+## Build Outputs
+
+After running the build command, you'll find:
+
+- A standard WebAssembly file at `./target/wasm32-unknown-unknown/debug/{package_name}.wasm`
+- A component WebAssembly file at `./{package_name}-c.wasm` in your project root directory
+
+## Next Steps
+
+After building your project:
+
+1. Test it with `cargo balius test`
+2. Deploy your WebAssembly component to a Balius runtime

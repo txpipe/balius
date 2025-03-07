@@ -1,0 +1,73 @@
+# Test Command
+
+The `test` command runs your Balius project in a local test environment, allowing you to interact with your headless dApp in a development setting.
+
+## Usage
+
+```bash
+cargo balius test [OPTIONS]
+```
+
+## Options
+
+- `--config, -c <CONFIG>` - Path to a custom configuration file (JSON format) (can also be set via WASM_CONFIG_PATH environment variable)
+- `--port, -p <PORT>` - Port to use for the JSON-RPC server (default: 3000, can also be set via PORT environment variable)
+- `--utxo-url <UTXO_URL>` - UTXoRPC endpoint URL (required, can also be set via UTXO_URL environment variable)
+- `--utxo-api-key <UTXO_API_KEY>` - UTXoRPC API key (required, can also be set via UTXO_API_KEY environment variable)
+
+## What It Does
+
+The test command:
+
+1. Sets up a local Balius runtime environment with the specified configuration
+2. Starts a JSON-RPC server on the specified port
+3. Connects to the specified UTXoRPC service for both ledger and chainsync functionalities
+4. Loads and registers your project's WebAssembly component
+5. Runs the project locally, allowing you to interact with it
+
+## Requirements
+
+First, build your project with `cargo balius build`. This will create a WebAssembly component that the test command will load.
+
+## Environment Variables
+
+All options can also be provided via environment variables:
+- `WASM_CONFIG_PATH` - Path to a custom configuration file
+- `PORT` - Port for the JSON-RPC server
+- `UTXO_URL` - URL for the UTXoRPC service
+- `UTXO_API_KEY` - API key for the UTXoRPC service
+
+## Examples
+
+### Run with default settings
+
+```bash
+cargo balius test --utxo-url "https://preview.utxorpc-v0.demeter.run" --utxo-api-key "your-api-key"
+```
+
+### Run with custom port and configuration
+
+```bash
+cargo balius test --port 8080 --config ./my-config.json --utxo-url "https://preview.utxorpc-v0.demeter.run" --utxo-api-key "your-api-key"
+```
+
+### Run with environment variables
+
+```bash
+export UTXO_URL="https://preview.utxorpc-v0.demeter.run"
+export UTXO_API_KEY="your-api-key"
+cargo balius test
+```
+
+## Custom Configuration
+
+You can provide a custom JSON configuration file with the `--config` option. This will be passed to your worker when it's registered with the runtime.
+
+## Testing Process
+
+During testing, your project will be running with:
+- A local LevelDB database (stored in `baliusd.db`)
+- Connection to the specified UTXoRPC service for both ledger and chainsync functionality
+- A JSON-RPC server for interacting with your dApp
+
+To stop the test, press Ctrl+C. The local database file will be automatically cleaned up.

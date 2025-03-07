@@ -9,6 +9,7 @@
   },
   "introduction": "Introduction",
   "quickstart": "Quickstart",
+  "cli": "CLI",
   "-- Reference --": {
     "type": "separator",
     "title": "Reference"
