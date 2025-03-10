@@ -374,7 +374,7 @@ impl Runtime {
     }
 
     pub async fn register_worker(
-        &mut self,
+        &self,
         id: &str,
         wasm_path: impl AsRef<Path>,
         config: serde_json::Value,
@@ -411,6 +411,52 @@ impl Runtime {
         );
 
         Ok(())
+    }
+
+    pub async fn register_worker_from_bytes(
+        &self,
+        id: &str,
+        wasm: &[u8],
+        config: serde_json::Value,
+    ) -> Result<(), Error> {
+        let component = wasmtime::component::Component::new(&self.engine, wasm)?;
+        let mut wasm_store = wasmtime::Store::new(
+            &self.engine,
+            WorkerState {
+                worker_id: id.to_owned(),
+                router: Router::new(),
+                ledger: self.ledger.clone(),
+                kv: self.kv.clone(),
+                submit: self.submit.clone(),
+            },
+        );
+
+        let instance =
+            wit::Worker::instantiate_async(&mut wasm_store, &component, &self.linker).await?;
+
+        let config = serde_json::to_vec(&config).unwrap();
+        instance.call_init(&mut wasm_store, &config).await?;
+
+        let cursor = self.store.get_worker_cursor(id)?;
+        debug!(cursor, id, "found cursor for worker");
+
+        self.loaded.lock().await.insert(
+            id.to_owned(),
+            LoadedWorker {
+                wasm_store,
+                instance,
+                cursor,
+            },
+        );
+
+        Ok(())
+    }
+
+    pub async fn remove_worker(&self, id: &str) -> Result<bool, Error> {
+        match self.loaded.lock().await.remove(id) {
+            Some(_) => Ok(true),
+            None => Ok(false),
+        }
     }
 
     pub async fn handle_chain(
