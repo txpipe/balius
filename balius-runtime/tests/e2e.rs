@@ -43,7 +43,7 @@ async fn faucet_claim() {
 
     let store = Store::open("tests/balius.db", None).unwrap();
 
-    let mut runtime = Runtime::builder(store)
+    let runtime = Runtime::builder(store)
         .with_ledger(ledgers::mock::Ledger.into())
         .build()
         .unwrap();
@@ -59,8 +59,10 @@ async fn faucet_claim() {
       }
     });
 
+    let absolute = std::fs::canonicalize("tests/faucet.wasm").unwrap();
+    let url = url::Url::parse(&format!("file://{}", absolute.display())).unwrap();
     runtime
-        .register_worker("faucet", "tests/faucet.wasm", config)
+        .register_worker("faucet", url, config)
         .await
         .unwrap();
 

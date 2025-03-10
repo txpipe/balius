@@ -1,12 +1,13 @@
 use std::path::PathBuf;
 
 use balius_runtime::{drivers, ledgers, Error, Runtime};
-use miette::{Context as _, IntoDiagnostic as _};
+use miette::{bail, Context as _, IntoDiagnostic as _};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use tracing::info;
 
 pub mod boilerplate;
+#[cfg(feature = "k8s")]
 pub mod k8s;
 
 #[serde_as]
@@ -19,27 +20,21 @@ pub struct LoggingConfig {
     include_tokio: bool,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct K8sConfig {
-    pub bucket: String,
-    pub download_dir: PathBuf,
-}
-
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct WorkerConfig {
     pub name: String,
-    pub module: PathBuf,
+    pub module: String,
     pub config: Option<PathBuf>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Config {
+    pub k8s: Option<bool>,
     pub rpc: drivers::jsonrpc::Config,
     pub ledger: ledgers::u5c::Config,
     pub chainsync: drivers::chainsync::Config,
     pub workers: Option<Vec<WorkerConfig>>,
     pub logging: LoggingConfig,
-    pub k8s: Option<K8sConfig>,
 }
 
 fn load_worker_config(config_path: Option<PathBuf>) -> Result<serde_json::Value, Error> {
@@ -66,8 +61,25 @@ async fn update_runtime_with_config(config: &Config, runtime: Runtime) -> miette
             .into_diagnostic()
             .context("loading worker config")?;
 
+        let module = match url::Url::parse(&worker.module) {
+            Ok(url) => url,
+            Err(err) => match err {
+                url::ParseError::RelativeUrlWithoutBase => {
+                    // Assume relative local file path.
+                    let pathbuf = PathBuf::from(&worker.module);
+                    let absolute = std::fs::canonicalize(pathbuf)
+                        .into_diagnostic()
+                        .context("failed to parse worker module as absolute path")?;
+                    url::Url::parse(&format!("file://{}", absolute.display()))
+                        .into_diagnostic()
+                        .context("parsing worker module as url")?
+                }
+                _ => bail!("Failed to parse worker module: {}", worker.name),
+            },
+        };
+
         runtime
-            .register_worker(&worker.name, worker.module, config)
+            .register_worker(&worker.name, module, config)
             .await
             .into_diagnostic()
             .context("registering worker")?;
@@ -79,11 +91,32 @@ async fn update_runtime_with_config(config: &Config, runtime: Runtime) -> miette
 }
 
 pub async fn update_runtime(config: &Config, runtime: Runtime) -> miette::Result<()> {
-    match &config.k8s {
-        Some(k8sconfig) => {
+    if config.k8s.unwrap_or(false) {
+        #[cfg(feature = "k8s")]
+        {
             info!("Running on K8s mode.");
-            k8s::update_runtime(k8sconfig, runtime.clone()).await
+            k8s::update_runtime(runtime.clone()).await
         }
-        None => update_runtime_with_config(config, runtime.clone()).await,
+        #[cfg(not(feature = "k8s"))]
+        {
+            panic!("Missing k8s feature flag to run in k8s mode.")
+        }
+    } else {
+        update_runtime_with_config(config, runtime.clone()).await
+    }
+}
+
+pub fn print_crd() {
+    #[cfg(feature = "k8s")]
+    {
+        use kube::CustomResourceExt;
+        print!(
+            "{}",
+            serde_yaml::to_string(&k8s::BaliusWorker::crd()).unwrap()
+        )
+    }
+    #[cfg(not(feature = "k8s"))]
+    {
+        panic!("Missing k8s feature flag to run in k8s mode.")
     }
 }

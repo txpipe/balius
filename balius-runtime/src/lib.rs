@@ -1,5 +1,5 @@
 use router::Router;
-use std::{collections::HashMap, path::Path, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
 use tokio::sync::Mutex;
 use tracing::{debug, info};
@@ -37,6 +37,12 @@ pub enum Error {
 
     #[error("worker not found '{0}'")]
     WorkerNotFound(WorkerId),
+
+    #[error("worker path not supported: '{0}'")]
+    UnsupportedWorkerPath(object_store::Error),
+
+    #[error("failed to read bytes for worker: '{0}'")]
+    WorkerReadError(object_store::Error),
 
     #[error("worker failed to handle event (code: '{0}', message: '{1}')")]
     Handle(u32, String),
@@ -99,6 +105,16 @@ impl From<redb::CommitError> for Error {
 impl From<redb::StorageError> for Error {
     fn from(value: redb::StorageError) -> Self {
         Self::Store(value.into())
+    }
+}
+
+impl From<object_store::Error> for Error {
+    fn from(value: object_store::Error) -> Self {
+        match value {
+            object_store::Error::NotSupported { source: _ } => Error::WorkerReadError(value),
+            object_store::Error::NotFound { path, source: _ } => Error::WorkerNotFound(path),
+            x => Error::WorkerReadError(x),
+        }
     }
 }
 
@@ -375,10 +391,12 @@ impl Runtime {
     pub async fn register_worker(
         &self,
         id: &str,
-        wasm_path: impl AsRef<Path>,
+        wasm_url: url::Url,
         config: serde_json::Value,
     ) -> Result<(), Error> {
-        let component = wasmtime::component::Component::from_file(&self.engine, wasm_path)?;
+        let (store, path) = object_store::parse_url(&wasm_url)?;
+        let object = store.get(&path).await?;
+        let component = wasmtime::component::Component::new(&self.engine, object.bytes().await?)?;
 
         let mut wasm_store = wasmtime::Store::new(
             &self.engine,
@@ -408,6 +426,19 @@ impl Runtime {
                 cursor,
             },
         );
+
+        Ok(())
+    }
+
+    pub async fn remove_worker(&self, id: &str) -> Result<(), Error> {
+        match self.loaded.lock().await.remove(id) {
+            Some(_) => {
+                info!("removed worker {} from worker map", id);
+            }
+            None => {
+                info!("worker {} not found, skipping delete", id);
+            }
+        };
 
         Ok(())
     }
