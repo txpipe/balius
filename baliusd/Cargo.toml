@@ -1,6 +1,6 @@
 [package]
 name = "baliusd"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 
 description = "A standalone Balius runtime that can be used as a daemon"
@@ -9,7 +9,7 @@ repository = "https://github.com/txpipe/balius"
 
 
 [dependencies]
-balius-runtime = { version = "0.3.1", path = "../balius-runtime" }
+balius-runtime = { version = "0.3.2", path = "../balius-runtime" }
 gasket = { version = "0.8.0", features = ["derive"] }
 miette = { version = "7.2.0", features = ["fancy"] }
 serde = { version = "1.0.213", features = ["derive"] }
