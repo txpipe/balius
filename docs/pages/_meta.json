@@ -13,7 +13,7 @@
     "type": "separator",
     "title": "Tools"
   },
-  "balius": "Balius Plugin",
+  "balius": "Cargo Plugin",
   "baliusd": "Balius Daemon",
   "-- Reference --": {
     "type": "separator",
