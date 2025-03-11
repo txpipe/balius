@@ -135,11 +135,11 @@ impl Ledger {
             .ok_or(wit::LedgerError::Upstream(
                 "unexpected response from read_params".to_string(),
             ))?;
-
         match params {
             utxorpc::spec::query::any_chain_params::Params::Cardano(params) => {
                 Ok(serde_json::to_vec(&params).unwrap())
             }
+            #[allow(unreachable_patterns)]
             _ => Err(wit::LedgerError::Upstream(
                 "unexpected response from read_params".to_string(),
             )),

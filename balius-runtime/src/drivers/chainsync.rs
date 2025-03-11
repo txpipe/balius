@@ -10,6 +10,7 @@ impl From<ChainPoint> for utxorpc::spec::sync::BlockRef {
     fn from(point: ChainPoint) -> Self {
         match point {
             ChainPoint::Cardano(x) => x.clone(),
+            #[allow(unreachable_patterns)]
             _ => todo!(),
         }
     }
