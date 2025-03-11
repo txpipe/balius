@@ -1,8 +1,12 @@
 [package]
 name = "baliusd"
-description = "A standalone Balius runtime that can be used as a daemon"
 version = "0.3.0"
 edition = "2021"
+
+description = "A standalone Balius runtime that can be used as a daemon"
+license = "Apache-2.0"
+repository = "https://github.com/txpipe/balius"
+
 
 [dependencies]
 balius-runtime = { version = "0.3.0", path = "../balius-runtime" }

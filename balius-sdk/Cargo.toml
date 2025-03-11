@@ -3,6 +3,10 @@ name = "balius-sdk"
 version = "0.3.0"
 edition = "2021"
 
+description = "SDK for building Headless dApps on UTxO-based blockchains"
+license = "Apache-2.0"
+repository = "https://github.com/txpipe/balius"
+
 [dependencies]
 utxorpc-spec = { version = "0.16.0", features = ["ledgers"], default-features = false }
 balius-macros = { path = "../balius-macros" }

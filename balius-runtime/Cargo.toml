@@ -3,6 +3,10 @@ name = "balius-runtime"
 version = "0.3.0"
 edition = "2021"
 
+description = "Runtime for run Headless dApps on UTxO-based blockchains"
+license = "Apache-2.0"
+repository = "https://github.com/txpipe/balius"
+
 [dependencies]
 thiserror = "2.0.11"
 wasmtime = { version = "28.0.1" }

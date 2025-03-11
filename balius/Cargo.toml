@@ -3,7 +3,7 @@ name = "balius"
 version = "0.3.0"
 edition = "2021"
 
-description = "SDK for building Headless dApps on UTxO-based blockchains"
+description = "CLI for building Headless dApps on UTxO-based blockchains"
 authors = ["TxPipe <hello@txpipe.io>"]
 license = "Apache-2.0"
 repository = "https://github.com/txpipe/balius"
