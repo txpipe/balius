@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use tokio::select;
 use tokio_util::sync::CancellationToken;
@@ -19,7 +21,7 @@ impl From<ChainPoint> for utxorpc::spec::sync::BlockRef {
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Config {
     pub endpoint_url: String,
-    pub api_key: String,
+    pub headers: Option<HashMap<String, String>>,
 }
 
 pub type UndoBlocks = Vec<Block>;
@@ -52,13 +54,19 @@ pub async fn run(
     mut runtime: Runtime,
     cancel: CancellationToken,
 ) -> Result<(), Error> {
-    let mut sync = utxorpc::ClientBuilder::new()
+    let mut builder = utxorpc::ClientBuilder::new()
         .uri(&config.endpoint_url)
-        .map_err(|e| Error::Driver(e.to_string()))?
-        .metadata("dmtr-api-key", config.api_key)
-        .map_err(|e| Error::Driver(e.to_string()))?
-        .build::<CardanoSyncClient>()
-        .await;
+        .map_err(|e| Error::Driver(e.to_string()))?;
+
+    if let Some(headers) = &config.headers {
+        for (k, v) in headers.iter() {
+            builder = builder
+                .metadata(k, v)
+                .map_err(|e| Error::Driver(e.to_string()))?;
+        }
+    }
+
+    let mut sync = builder.build::<CardanoSyncClient>().await;
 
     let cursor = runtime
         .chain_cursor()

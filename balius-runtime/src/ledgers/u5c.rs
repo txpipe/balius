@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use utxorpc::CardanoQueryClient;
 
@@ -81,7 +83,7 @@ impl From<utxorpc::UtxoPage<utxorpc::Cardano>> for wit::UtxoPage {
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Config {
     pub endpoint_url: String,
-    pub api_key: String,
+    pub headers: Option<HashMap<String, String>>,
 }
 
 #[derive(Clone)]
@@ -91,11 +93,14 @@ pub struct Ledger {
 
 impl Ledger {
     pub async fn new(config: Config) -> Result<Self, crate::Error> {
-        let queries = utxorpc::ClientBuilder::new()
-            .uri(&config.endpoint_url)?
-            .metadata("dmtr-api-key", config.api_key)?
-            .build::<CardanoQueryClient>()
-            .await;
+        let mut builder = utxorpc::ClientBuilder::new().uri(&config.endpoint_url)?;
+        if let Some(headers) = &config.headers {
+            for (k, v) in headers.iter() {
+                builder = builder.metadata(k, v)?;
+            }
+        }
+
+        let queries = builder.build::<CardanoQueryClient>().await;
 
         Ok(Self { queries })
     }

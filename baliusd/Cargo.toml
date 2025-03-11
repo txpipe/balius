@@ -5,7 +5,7 @@ version = "0.2.0"
 edition = "2021"
 
 [dependencies]
-balius-runtime = { version = "0.2.0", path = "../balius-runtime" }
+balius-runtime = { version = "0.3.0", path = "../balius-runtime" }
 gasket = { version = "0.8.0", features = ["derive"] }
 miette = { version = "7.2.0", features = ["fancy"] }
 serde = { version = "1.0.213", features = ["derive"] }
