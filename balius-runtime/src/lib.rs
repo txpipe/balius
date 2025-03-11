@@ -5,7 +5,7 @@ use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 use utxorpc::spec::sync::BlockRef;
 
-mod wit {
+pub mod wit {
     wasmtime::component::bindgen!({
         path:"../wit",
         async: true,
