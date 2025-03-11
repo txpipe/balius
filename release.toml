@@ -1,5 +1,0 @@
-push = false
-publish = false
-sign-tag = true
-shared-version = true
-tag-name = "v{{version}}"

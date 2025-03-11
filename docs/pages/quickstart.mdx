@@ -5,35 +5,90 @@
 Before getting started with Balius, make sure you have the following prerequisites installed:
 
 1. **Rust**: Balius is built with Rust, so you'll need to have Rust installed on your system. You can install Rust by following the official instructions at [https://www.rust-lang.org/tools/install](https://www.rust-lang.org/tools/install).
-
 2. **Cargo**: Cargo is Rust's package manager and build tool. It comes pre-installed with Rust, so if you have Rust installed, you should already have Cargo.
 
-## Create a new Rust project
+## Installation Options
+
+There are two main ways to use Balius:
+
+### Option 1: Add Libraries as Dependencies
+
+For integrating Balius functionality directly into your Rust projects, add the required libraries to your `Cargo.toml`:
+
+```toml
+[dependencies]
+balius-sdk = "0.1.0"      # Core SDK for building headless dApps
+balius-runtime = "0.1.0"  # Optional: Runtime for executing dApps
+```
+
+### Option 2: Install Balius Tools
+
+For development tools that help with creating, building and testing Balius projects:
+
+```bash
+# Install the Balius Cargo plugin
+cargo install balius
+
+# Install the Balius daemon (optional)
+cargo install baliusd
+```
+
+## Create a new Balius project
+
+The easiest way to get started is using the Balius Cargo plugin:
+
+```bash
+# Create a new project
+cargo balius init my_dapp
+cd my_dapp
+
+# Build your project
+cargo balius build
+```
+
+Alternatively, you can create a standard Rust project and add Balius dependencies manually:
 
 ```bash
 cargo new my_dapp
+cd my_dapp
+# Then edit Cargo.toml to add the dependencies
 ```
-
-## Add Balius as a dependency
-
-To add Balius as a dependency to your project, open your `Cargo.toml` file and add the following line under the `[dependencies]` section:
-
-```toml
-balius = "0.1.0"
-```
-
-Then, run `cargo build` to download and compile the dependencies.
 
 ## Add a hello world script
 
+Here's a simple example using the balius-sdk:
+
 ```rust
-fn say_hello(name: String) -> Result<String> {
-    Ok(format!("Hello, {}!", name))
+use balius_sdk::{Config, FnHandler, Params, Json, Worker, WorkerResult};
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Clone)]
+struct SomeConfig {}
+
+#[derive(Serialize, Deserialize)]
+struct SayHelloParams {
+    name: String,
 }
 
-#[balius::main]
-fn main(config: Config) -> balius::Worker {
-    balius::Worker::new()
-        .handle_request("say-hello", say_hello)
+#[derive(Serialize, Deserialize)]
+struct Reply {
+    message: String,
 }
+
+fn say_hello(_: Config<SomeConfig>, params: Params<SayHelloParams>) -> WorkerResult<Json<Reply>> {
+    Ok(Json(Reply {
+        message: format!("Hello, {}", params.0.name),
+    }))
+}
+
+#[balius_sdk::main]
+fn main() -> Worker {
+    Worker::new().with_request_handler("say-hello", FnHandler::from(say_hello))
+} 
 ```
+
+## Next Steps
+
+- Explore the [cargo plugin documentation](./balius) for more information about the Balius tools
+- Check out the [examples](https://github.com/txpipe/balius/tree/main/examples) in the repository
+- Learn about the [event system](./events) for reacting to blockchain activities
