@@ -8,5 +8,5 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-balius-sdk = "0.3.3"
+balius-sdk = "0.3.4"
 ```
