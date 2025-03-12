@@ -2,11 +2,16 @@
 name = "baliusd"
 version = "0.3.2"
 edition = "2021"
+publish = false
 
 description = "A standalone Balius runtime that can be used as a daemon"
 license = "Apache-2.0"
 repository = "https://github.com/txpipe/balius"
 
+exclude = [
+  "bin",
+  "example-*",
+]
 
 [dependencies]
 balius-runtime = { version = "0.3.2", path = "../balius-runtime" }
@@ -21,3 +26,6 @@ tokio-util = "0.7.12"
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
 config = { version = "0.13.3", default-features = false, features = ["toml", "json"] }
+
+[package.metadata.release]
+release = false
