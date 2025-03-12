@@ -1,6 +1,6 @@
 [package]
 name = "baliusd"
-version = "0.3.2"
+version = "0.3.3"
 edition = "2021"
 publish = false
 
@@ -14,7 +14,7 @@ exclude = [
 ]
 
 [dependencies]
-balius-runtime = { version = "0.3.2", path = "../balius-runtime" }
+balius-runtime = { version = "0.3.3", path = "../balius-runtime" }
 gasket = { version = "0.8.0", features = ["derive"] }
 miette = { version = "7.2.0", features = ["fancy"] }
 serde = { version = "1.0.213", features = ["derive"] }
