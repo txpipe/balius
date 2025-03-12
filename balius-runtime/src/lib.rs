@@ -7,7 +7,7 @@ use utxorpc::spec::sync::BlockRef;
 
 mod wit {
     wasmtime::component::bindgen!({
-        path:"../wit",
+        path: "./wit",
         async: true,
         tracing: true,
     });
