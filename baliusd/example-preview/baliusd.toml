@@ -7,11 +7,11 @@ include_tokio = true
 
 [ledger]
 endpoint_url = "https://preview.utxorpc-v0.demeter.run"
-api_key = "utxorpc1gk0xe296vd5q567uug5"
+headers."dmtr-api-key" = "utxorpc1gk0xe296vd5q567uug5"
 
 [chainsync]
 endpoint_url = "https://preview.utxorpc-v0.demeter.run"
-api_key = "utxorpc1gk0xe296vd5q567uug5"
+headers."dmtr-api-key" = "utxorpc1gk0xe296vd5q567uug5"
 
 [[workers]]
 name = "faucet"

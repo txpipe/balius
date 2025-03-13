@@ -3,9 +3,7 @@ use std::path::PathBuf;
 use balius_runtime::{drivers, ledgers, Runtime, Store};
 use miette::{Context as _, IntoDiagnostic as _};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use serde_with::{serde_as, DisplayFromStr};
-use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 mod boilerplate;
@@ -70,7 +68,7 @@ async fn main() -> miette::Result<()> {
         .into_diagnostic()
         .context("setting up ledger")?;
 
-    let mut runtime = Runtime::builder(store)
+    let runtime = Runtime::builder(store)
         .with_ledger(ledger.into())
         .with_kv(balius_runtime::kv::Kv::Mock)
         .build()
@@ -81,7 +79,7 @@ async fn main() -> miette::Result<()> {
         let config = load_worker_config(worker.config)?;
 
         runtime
-            .register_worker(&worker.name, worker.module, config)
+            .register_worker_from_file(&worker.name, worker.module, config)
             .await
             .into_diagnostic()
             .context("registering worker")?;

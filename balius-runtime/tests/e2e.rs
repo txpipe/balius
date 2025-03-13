@@ -43,7 +43,7 @@ async fn faucet_claim() {
 
     let store = Store::open("tests/balius.db", None).unwrap();
 
-    let mut runtime = Runtime::builder(store)
+    let runtime = Runtime::builder(store)
         .with_ledger(ledgers::mock::Ledger.into())
         .build()
         .unwrap();
@@ -60,7 +60,7 @@ async fn faucet_claim() {
     });
 
     runtime
-        .register_worker("faucet", "tests/faucet.wasm", config)
+        .register_worker_from_file("faucet", "tests/faucet.wasm", config)
         .await
         .unwrap();
 

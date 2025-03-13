@@ -110,7 +110,7 @@ impl Store {
                 Ok(last.map(|(k, _)| k.value()))
             }
             Err(redb::TableError::TableDoesNotExist(_)) => Ok(None),
-            Err(e) => return Err(e.into()),
+            Err(e) => Err(e.into()),
         }
     }
 
@@ -130,7 +130,7 @@ impl Store {
 
     pub fn write_ahead(
         &mut self,
-        undo_blocks: &Vec<Block>,
+        undo_blocks: &[Block],
         next_block: &Block,
     ) -> Result<LogSeq, Error> {
         self.log_seq += 1;

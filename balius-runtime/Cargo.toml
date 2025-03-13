@@ -26,8 +26,16 @@ utxorpc = { version = "0.10.0" }
 # utxorpc = { path = "../../../utxorpc/rust-sdk" }
 tokio-util = "0.7.12"
 prost = "0.13"
+object_store = { version = "0.12.0", features = ["fs"] }
+url = "2.5.4"
 
 [dev-dependencies]
 tokio = "1.40.0"
 wat = "1"
 wit-component = "0.225"
+
+[features]
+http = ["object_store/http"]
+aws = ["object_store/aws"]
+gcp = ["object_store/gcp"]
+azure = ["object_store/azure"]
