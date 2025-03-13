@@ -1,11 +1,20 @@
 [package]
 name = "baliusd"
-description = "A standalone Balius runtime that can be used as a daemon"
-version = "0.2.0"
+version = "0.3.4"
 edition = "2021"
+publish = false
+
+description = "A standalone Balius runtime that can be used as a daemon"
+license = "Apache-2.0"
+repository = "https://github.com/txpipe/balius"
+
+exclude = [
+  "bin",
+  "example-*",
+]
 
 [dependencies]
-balius-runtime = { version = "0.3.0", path = "../balius-runtime" }
+balius-runtime = { version = "0.3.4", path = "../balius-runtime" }
 gasket = { version = "0.8.0", features = ["derive"] }
 miette = { version = "7.2.0", features = ["fancy"] }
 serde = { version = "1.0.213", features = ["derive"] }
@@ -17,3 +26,6 @@ tokio-util = "0.7.12"
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
 config = { version = "0.13.3", default-features = false, features = ["toml", "json"] }
+
+[package.metadata.release]
+release = false

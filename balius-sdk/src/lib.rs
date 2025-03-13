@@ -2,7 +2,7 @@ pub mod wit {
     wit_bindgen::generate!({
         pub_export_macro: true,
         default_bindings_module: "balius_sdk::wit",
-        path: "../wit",
+        path: "./wit",
         additional_derives: [PartialEq, Eq, Hash, Clone, serde::Serialize,serde::Deserialize]
     });
 }

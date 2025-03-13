@@ -1,0 +1,122 @@
+# Balius Daemon (baliusd)
+
+The Balius Daemon (`baliusd`) is a runtime environment that can execute Balius headless dApps in production environments. It is part of the Balius tooling ecosystem alongside the `balius` Cargo plugin.
+
+## Overview
+
+`baliusd` serves as the execution engine for Balius dApps, providing:
+
+- A standardized environment for running WebAssembly components built with Balius
+- Management of connections to blockchain nodes and services
+- HTTP APIs for interacting with your dApp
+- Background tasks and event processing
+- State persistence
+- Configuration management
+
+## Installation
+
+You can install the Balius daemon directly from cargo:
+
+```bash
+cargo install baliusd
+```
+
+## Usage
+
+To run the Balius daemon:
+
+```bash
+baliusd
+```
+
+The daemon doesn't require any command line parameters as it automatically searches for configuration files in specific locations.
+
+### Configuration Files
+
+The Balius daemon searches for configuration files in the following order:
+
+1. `/etc/baliusd/daemon.toml` (system-wide configuration, optional)
+2. `baliusd.toml` in the current working directory (optional)
+
+Configuration options from later sources override earlier ones. For example, settings in `baliusd.toml` will override those in `/etc/baliusd/daemon.toml`.
+
+### Configuration Format
+
+The Balius daemon is configured using a TOML file. Here's an example configuration:
+
+```toml
+# JSON-RPC server configuration
+[rpc]
+listen_address = "0.0.0.0:3000"
+
+# Logging configuration
+[logging]
+max_level = "debug"
+include_tokio = true
+
+# UTXoRPC Ledger configuration
+[ledger]
+endpoint_url = "UTXoRPC-url"
+api_key = "your-api-key"
+
+# Chain synchronization configuration
+[chainsync]
+endpoint_url = "UTXoRPC-url"
+api_key = "your-api-key"
+
+# Define workers to be loaded
+[[workers]]
+name = "dapp-name"
+module = "bin/dapp-name.wasm"
+config = "dapp-config.json"
+
+[[workers]]
+name = "dapp2-name"
+module = "bin/dapp2-name.wasm"
+config = "dapp2-name.json"
+```
+
+### Worker Configuration Files
+
+Each worker can have an optional JSON configuration file specified by the `config` parameter in the worker definition. These configuration files should be located in the same directory as your `baliusd.toml` file, or use an absolute path.
+
+For example, if you're running baliusd from `/home/user/myproject` with a `baliusd.toml` file there, you would place worker configs like `wallet.json` in that same directory.
+
+## Example Directories
+
+The Balius repository includes example configurations for both mainnet and preview network:
+
+- `example-mainnet/`: Contains sample configuration for Cardano mainnet
+- `example-preview/`: Contains sample configuration for Cardano preview testnet
+
+To use these examples, navigate to one of these directories and run `baliusd` from there.
+
+## Running Multiple Apps
+
+One of the key features of baliusd is its ability to run multiple dApps simultaneously within a single process.
+
+## API Access
+
+When running, baliusd exposes APIs for each loaded app at:
+
+```
+http://{host}:{port}/{app_name}/...
+```
+
+For example, if configured on localhost port 8080 with a wallet app:
+
+```
+http://localhost:8080/wallet/...
+```
+
+## Relationship to Other Balius Components
+
+- **balius-sdk**: dApps built with balius-sdk can be compiled to WebAssembly and run by baliusd
+- **balius-runtime**: The library that powers baliusd's execution environment
+- **balius**: CLI tool that helps build WebAssembly components compatible with baliusd
+
+## Next Steps
+
+- Check out the [example configurations](https://github.com/txpipe/balius/tree/main/baliusd/example-preview) in the repository
+- Learn about [events](./events) that your dApps can listen for
+- Explore the [quickstart guide](./quickstart) to build your first dApp

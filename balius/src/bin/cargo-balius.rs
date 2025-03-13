@@ -1,10 +1,37 @@
-use clap::{Parser, Subcommand};
-use serde_json::Value;
-use std::{path::PathBuf, process::Command};
+use clap::Parser;
 
-#[derive(Debug, Subcommand)]
+mod command;
+
+#[derive(Debug, Parser)]
 enum BaliusCommand {
+    /// Build the Balius project
     Build,
+    /// Initialize a new Balius project
+    #[command(trailing_var_arg = true)]
+    Init {
+        /// Project name
+        #[arg(allow_hyphen_values = false)]
+        project_name: Vec<String>,
+    },
+    /// Run the Balius test server
+    #[command(arg_required_else_help = true)]
+    Test {
+        /// Path to a custom configuration file
+        #[arg(short, long, env = "WASM_CONFIG_PATH")]
+        config: Option<String>,
+        
+        /// Port to use for the JSON-RPC server
+        #[arg(short, long, default_value = "3000", env = "PORT")]
+        port: u16,
+
+        /// UTXoRCP endpoint URL
+        #[arg(long, env = "UTXO_URL")]
+        utxo_url: String,
+
+        /// UTXoRCP API key
+        #[arg(long, env = "UTXO_API_KEY")]
+        utxo_api_key: String,
+    },
 }
 
 #[derive(Debug, Parser)]
@@ -13,81 +40,23 @@ struct Args {
     command: BaliusCommand,
 }
 
-fn get_project_info() -> (PathBuf, String) {
-    let output = Command::new("cargo")
-        .args(["metadata", "--format-version", "1"])
-        .output()
-        .expect("Failed to execute cargo metadata");
-
-    let metadata: serde_json::Value =
-        serde_json::from_slice(&output.stdout).expect("Failed to parse cargo metadata");
-
-    let target_directory = PathBuf::from(metadata["target_directory"].as_str().unwrap());
-
-    let package = &metadata["packages"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|p| p["id"] == metadata["resolve"]["root"])
-        .expect("Failed to find root package");
-
-    let package_name = package["name"].as_str().unwrap().to_string();
-
-    let package_name = package["targets"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|t| {
-            t["kind"]
-                .as_array()
-                .unwrap()
-                .contains(&Value::String("cdylib".to_string()))
-        })
-        .map(|t| t["name"].as_str().unwrap().to_string())
-        .unwrap_or_default();
-
-    (target_directory, package_name)
-}
-
-fn build() {
-    println!("Building...");
-    let mut cmd = Command::new("cargo");
-    cmd.arg("build");
-    cmd.arg("--target");
-    cmd.arg("wasm32-unknown-unknown");
-
-    let status = cmd.status().unwrap();
-
-    if !status.success() {
-        std::process::exit(status.code().unwrap_or(1));
-    }
-
-    println!("Turning into component...");
-
-    let (target_dir, package_name) = get_project_info();
-    let wasm_file = target_dir.join(format!(
-        "wasm32-unknown-unknown/debug/{}.wasm",
-        package_name
-    ));
-
-    let mut cmd = Command::new("wasm-tools");
-    cmd.arg("component");
-    cmd.arg("new");
-    cmd.arg(&wasm_file);
-    cmd.arg("-o");
-    cmd.arg(format!("{}-c.wasm", package_name));
-
-    let status = cmd.status().unwrap();
-
-    if !status.success() {
-        std::process::exit(status.code().unwrap_or(1));
-    }
-}
-
-fn main() {
+#[tokio::main]
+async fn main() {
     let args = Args::parse_from(std::env::args().skip(1));
 
     match args.command {
-        BaliusCommand::Build => build(),
+        BaliusCommand::Build => command::build::execute(),
+        BaliusCommand::Init { project_name } => command::init::execute(project_name),
+        BaliusCommand::Test {
+            config,
+            port,
+            utxo_url,
+            utxo_api_key,
+        } => command::test::execute(
+            config,
+            port,
+            utxo_url,
+            utxo_api_key
+        ).await,
     }
 }
