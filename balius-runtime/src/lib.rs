@@ -59,9 +59,6 @@ pub enum Error {
     #[error("driver error: {0}")]
     Driver(String),
 
-    #[error("failed to parse input: {0}")]
-    ParseError(String),
-
     #[error("failed to interact with WASM object: {0}")]
     ObjectStoreError(object_store::Error),
 
@@ -127,7 +124,7 @@ impl From<object_store::Error> for Error {
     fn from(value: object_store::Error) -> Self {
         match value {
             object_store::Error::Generic { store, source } => {
-                Self::ParseError(format!("Failed to parse url: {}, {}", store, source))
+                Self::Config(format!("Failed to parse url: {}, {}", store, source))
             }
             object_store::Error::NotFound { path: _, source } => {
                 Self::WorkerNotFound(source.to_string())
