@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 use balius_runtime::{ledgers, Runtime, Store};
 use miette::{Context as _, IntoDiagnostic as _};
@@ -85,7 +85,7 @@ async fn run_project_with_config(
     config_path: Option<PathBuf>,
     port: u16,
     utxo_url: String,
-    utxo_api_key: String
+    utxo_api_key: String,
 ) -> miette::Result<()> {
     setup_tracing()?;
 
@@ -93,17 +93,21 @@ async fn run_project_with_config(
     let store: Store = Store::open("baliusd.db", None)
         .into_diagnostic()
         .context("opening store")?;
-        
+
     let ledger = ledgers::u5c::Ledger::new({
         ledgers::u5c::Config {
             endpoint_url: utxo_url.clone(),
-            api_key: utxo_api_key.clone()
+            headers: Some(HashMap::from([(
+                "dmtr-api-key".to_string(),
+                utxo_api_key.to_string(),
+            )])),
         }
-    }).await
+    })
+    .await
     .into_diagnostic()
     .context("setting up ledger")?;
 
-    let mut runtime = Runtime::builder(store)
+    let runtime = Runtime::builder(store)
         .with_ledger(ledger.into())
         .with_kv(balius_runtime::kv::Kv::Mock)
         .build()
@@ -115,7 +119,7 @@ async fn run_project_with_config(
     let wasm_path = format!("{}-c.wasm", project_name);
 
     runtime
-        .register_worker(project_name, &wasm_path, config)
+        .register_worker_from_file(project_name, &wasm_path, config)
         .await
         .into_diagnostic()
         .context(format!("registering worker {}", &wasm_path))?;
@@ -133,7 +137,10 @@ async fn run_project_with_config(
     let chainsync_driver = tokio::spawn(balius_runtime::drivers::chainsync::run(
         balius_runtime::drivers::chainsync::Config {
             endpoint_url: utxo_url.clone(),
-            api_key: utxo_api_key.clone()
+            headers: Some(HashMap::from([(
+                "dmtr-api-key".to_string(),
+                utxo_api_key.clone(),
+            )])),
         },
         runtime.clone(),
         cancel.clone(),
@@ -157,14 +164,9 @@ pub async fn execute(
 
     // Convert config_path from String to PathBuf if provided
     let config_path_buf = config_path.map(PathBuf::from);
-    
-    let result = run_project_with_config(
-        &package_name,
-        config_path_buf,
-        port,
-        utxo_url,
-        utxo_api_key,
-    ).await;
+
+    let result =
+        run_project_with_config(&package_name, config_path_buf, port, utxo_url, utxo_api_key).await;
     if result.is_err() {
         info!("Error running project: {}", result.err().unwrap());
     }

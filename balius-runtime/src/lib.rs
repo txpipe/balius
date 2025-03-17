@@ -1,11 +1,11 @@
 use router::Router;
-use std::{collections::HashMap, path::Path, sync::Arc};
+use std::{collections::HashMap, io::Read, path::Path, sync::Arc};
 use thiserror::Error;
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 use utxorpc::spec::sync::BlockRef;
 
-mod wit {
+pub mod wit {
     wasmtime::component::bindgen!({
         path: "./wit",
         async: true,
@@ -58,6 +58,12 @@ pub enum Error {
 
     #[error("driver error: {0}")]
     Driver(String),
+
+    #[error("failed to interact with WASM object: {0}")]
+    ObjectStoreError(object_store::Error),
+
+    #[error("failed to interact with local WASM file: {0}")]
+    IoError(std::io::Error),
 }
 
 impl From<wasmtime::Error> for Error {
@@ -104,7 +110,27 @@ impl From<redb::StorageError> for Error {
 
 impl From<pallas::ledger::addresses::Error> for Error {
     fn from(value: pallas::ledger::addresses::Error) -> Self {
-        Self::BadAddress(value.into())
+        Self::BadAddress(value)
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(value: std::io::Error) -> Self {
+        Self::IoError(value)
+    }
+}
+
+impl From<object_store::Error> for Error {
+    fn from(value: object_store::Error) -> Self {
+        match value {
+            object_store::Error::Generic { store, source } => {
+                Self::Config(format!("Failed to parse url: {}, {}", store, source))
+            }
+            object_store::Error::NotFound { path: _, source } => {
+                Self::WorkerNotFound(source.to_string())
+            }
+            x => Self::ObjectStoreError(x),
+        }
     }
 }
 
@@ -361,8 +387,7 @@ impl Runtime {
             .lock()
             .await
             .values()
-            .map(|w| w.cursor)
-            .flatten()
+            .flat_map(|w| w.cursor)
             .min();
 
         if let Some(seq) = lowest_seq {
@@ -374,12 +399,12 @@ impl Runtime {
     }
 
     pub async fn register_worker(
-        &mut self,
+        &self,
         id: &str,
-        wasm_path: impl AsRef<Path>,
+        wasm: &[u8],
         config: serde_json::Value,
     ) -> Result<(), Error> {
-        let component = wasmtime::component::Component::from_file(&self.engine, wasm_path)?;
+        let component = wasmtime::component::Component::new(&self.engine, wasm)?;
 
         let mut wasm_store = wasmtime::Store::new(
             &self.engine,
@@ -409,6 +434,46 @@ impl Runtime {
                 cursor,
             },
         );
+
+        Ok(())
+    }
+
+    /// Register worker into runtime using URL.
+    ///
+    /// Will download bytes from URL and interpret it as WASM. URL support is determined by build
+    /// features passed on to the [object_store](https://docs.rs/crate/object_store/latest) crate.
+    pub async fn register_worker_from_url(
+        &self,
+        id: &str,
+        url: &url::Url,
+        config: serde_json::Value,
+    ) -> Result<(), Error> {
+        let (store, path) = object_store::parse_url(url)?;
+        let bytes = store.get(&path).await?.bytes().await?;
+        self.register_worker(id, &bytes, config).await
+    }
+
+    pub async fn register_worker_from_file(
+        &self,
+        id: &str,
+        wasm_path: impl AsRef<Path>,
+        config: serde_json::Value,
+    ) -> Result<(), Error> {
+        let mut file = std::fs::File::open(wasm_path)?;
+        let mut buffer = Vec::new();
+        file.read_to_end(&mut buffer)?;
+        self.register_worker(id, &buffer, config).await
+    }
+
+    pub async fn remove_worker(&self, id: &str) -> Result<(), Error> {
+        match self.loaded.lock().await.remove(id) {
+            Some(_) => {
+                info!(worker = id, "Successfully removed worker from runtime.")
+            }
+            None => {
+                warn!(worker = id, "Worker not found, skipping remove.")
+            }
+        }
 
         Ok(())
     }
