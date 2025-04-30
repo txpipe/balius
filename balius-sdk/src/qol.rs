@@ -21,6 +21,8 @@ pub enum Error {
     KV(wit::balius::app::kv::KvError),
     #[error("ledger error: {0}")]
     Ledger(wit::balius::app::ledger::LedgerError),
+    #[error("sign error: {0}")]
+    Sign(wit::balius::app::sign::SignError),
 }
 
 impl From<Error> for wit::HandleError {
@@ -46,12 +48,16 @@ impl From<Error> for wit::HandleError {
                 code: 4,
                 message: err.to_string(),
             },
-            Error::BadUtxo => wit::HandleError {
+            Error::Sign(err) => wit::HandleError {
                 code: 5,
+                message: err.to_string(),
+            },
+            Error::BadUtxo => wit::HandleError {
+                code: 6,
                 message: "bad utxo".to_owned(),
             },
             Error::EventMismatch(x) => wit::HandleError {
-                code: 6,
+                code: 7,
                 message: format!("event mismatch, expected {}", x),
             },
         }
@@ -73,6 +79,12 @@ impl From<wit::balius::app::kv::KvError> for Error {
 impl From<wit::balius::app::ledger::LedgerError> for Error {
     fn from(error: wit::balius::app::ledger::LedgerError) -> Self {
         Error::Ledger(error)
+    }
+}
+
+impl From<wit::balius::app::sign::SignError> for Error {
+    fn from(error: wit::balius::app::sign::SignError) -> Self {
+        Error::Sign(error)
     }
 }
 

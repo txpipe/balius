@@ -57,6 +57,18 @@ interface ledger {
     read-params: func() -> result<json, ledger-error>;
 }
 
+interface sign {
+    type payload = list<u8>;
+    type signature = list<u8>;
+    variant sign-error {
+        internal(string),
+        key-not-found(string),
+        unsupported-algorithm(string),
+    }
+
+    sign-payload: func(key-name: string, algorithm: string, payload: payload) -> result<signature, sign-error>;
+}
+
 interface submit {
     type cbor = list<u8>;
     type submit-error = u32;
@@ -141,6 +153,7 @@ interface driver {
 world worker {
     import kv;
     import broadcast;
+    import sign;
     import submit;
     import ledger;
     

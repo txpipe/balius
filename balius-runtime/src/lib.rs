@@ -20,6 +20,7 @@ mod store;
 pub mod drivers;
 pub mod kv;
 pub mod ledgers;
+pub mod sign;
 pub mod submit;
 
 pub use store::Store;
@@ -234,6 +235,7 @@ struct WorkerState {
     pub router: router::Router,
     pub ledger: Option<ledgers::Ledger>,
     pub kv: Option<kv::Kv>,
+    pub sign: Option<sign::Signer>,
     pub submit: Option<submit::Submit>,
 }
 
@@ -373,6 +375,7 @@ pub struct Runtime {
     store: store::Store,
     ledger: Option<ledgers::Ledger>,
     kv: Option<kv::Kv>,
+    sign: Option<sign::Signer>,
     submit: Option<submit::Submit>,
 }
 
@@ -413,6 +416,7 @@ impl Runtime {
                 router: Router::new(),
                 ledger: self.ledger.clone(),
                 kv: self.kv.clone(),
+                sign: self.sign.clone(),
                 submit: self.submit.clone(),
             },
         );
@@ -440,8 +444,8 @@ impl Runtime {
 
     /// Register worker into runtime using URL.
     ///
-    /// Will download bytes from URL and interpret it as WASM. URL support is determined by build
-    /// features passed on to the [object_store](https://docs.rs/crate/object_store/latest) crate.
+    /// Will download bytes from URL and interpret it as WASM. URL support is
+    /// determined by build features passed on to the [object_store](https://docs.rs/crate/object_store/latest) crate.
     pub async fn register_worker_from_url(
         &self,
         id: &str,
@@ -531,6 +535,7 @@ pub struct RuntimeBuilder {
     linker: wasmtime::component::Linker<WorkerState>,
     ledger: Option<ledgers::Ledger>,
     kv: Option<kv::Kv>,
+    sign: Option<sign::Signer>,
     submit: Option<submit::Submit>,
 }
 
@@ -550,6 +555,7 @@ impl RuntimeBuilder {
             linker,
             ledger: None,
             kv: None,
+            sign: None,
             submit: None,
         }
     }
@@ -576,6 +582,17 @@ impl RuntimeBuilder {
         self
     }
 
+    pub fn with_signer(mut self, sign: sign::Signer) -> Self {
+        self.sign = Some(sign);
+
+        wit::balius::app::sign::add_to_linker(&mut self.linker, |state: &mut WorkerState| {
+            state.sign.as_mut().unwrap()
+        })
+        .unwrap();
+
+        self
+    }
+
     pub fn with_submit(mut self, submit: submit::Submit) -> Self {
         self.submit = Some(submit);
 
@@ -594,6 +611,7 @@ impl RuntimeBuilder {
             linker,
             ledger,
             kv,
+            sign,
             submit,
         } = self;
 
@@ -604,6 +622,7 @@ impl RuntimeBuilder {
             store,
             ledger,
             kv,
+            sign,
             submit,
         })
     }
