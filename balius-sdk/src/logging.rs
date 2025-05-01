@@ -31,7 +31,7 @@ impl<S: tracing::Subscriber> Layer<S> for BaliusLayer {
         };
 
         let mut message = String::new();
-        let mut visitor = DefaultVisitor::new(Writer::new(&mut message), false);
+        let mut visitor = DefaultVisitor::new(Writer::new(&mut message), true);
         event.record(&mut visitor);
         if visitor.finish().is_err() {
             message = "[error formatting message]".to_string();
