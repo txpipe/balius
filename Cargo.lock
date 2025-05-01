@@ -330,6 +330,8 @@ dependencies = [
  "serde_json",
  "serde_with",
  "thiserror 2.0.12",
+ "tracing",
+ "tracing-subscriber",
  "utxorpc-spec 0.16.0",
  "wit-bindgen",
 ]

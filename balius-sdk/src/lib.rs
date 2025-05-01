@@ -22,5 +22,8 @@ pub mod _internal;
 /// Quality of life features to make the SDK more ergonomic
 mod qol;
 
+/// A tracing implementation which sends logs to the server
+pub mod logging;
+
 pub use _internal::Worker;
 pub use qol::*;
