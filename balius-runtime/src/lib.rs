@@ -20,6 +20,7 @@ mod store;
 pub mod drivers;
 pub mod kv;
 pub mod ledgers;
+pub mod logging;
 pub mod sign;
 pub mod submit;
 
@@ -234,6 +235,7 @@ struct WorkerState {
     pub worker_id: String,
     pub router: router::Router,
     pub ledger: Option<ledgers::Ledger>,
+    pub logging: Option<logging::Logger>,
     pub kv: Option<kv::Kv>,
     pub sign: Option<sign::Signer>,
     pub submit: Option<submit::Submit>,
@@ -374,6 +376,7 @@ pub struct Runtime {
 
     store: store::Store,
     ledger: Option<ledgers::Ledger>,
+    logging: Option<logging::Logger>,
     kv: Option<kv::Kv>,
     sign: Option<sign::Signer>,
     submit: Option<submit::Submit>,
@@ -415,6 +418,7 @@ impl Runtime {
                 worker_id: id.to_owned(),
                 router: Router::new(),
                 ledger: self.ledger.clone(),
+                logging: self.logging.clone(),
                 kv: self.kv.clone(),
                 sign: self.sign.clone(),
                 submit: self.submit.clone(),
@@ -534,6 +538,7 @@ pub struct RuntimeBuilder {
     engine: wasmtime::Engine,
     linker: wasmtime::component::Linker<WorkerState>,
     ledger: Option<ledgers::Ledger>,
+    logging: Option<logging::Logger>,
     kv: Option<kv::Kv>,
     sign: Option<sign::Signer>,
     submit: Option<submit::Submit>,
@@ -554,6 +559,7 @@ impl RuntimeBuilder {
             engine,
             linker,
             ledger: None,
+            logging: None,
             kv: None,
             sign: None,
             submit: None,
@@ -576,6 +582,17 @@ impl RuntimeBuilder {
 
         wit::balius::app::kv::add_to_linker(&mut self.linker, |state: &mut WorkerState| {
             state.kv.as_mut().unwrap()
+        })
+        .unwrap();
+
+        self
+    }
+
+    pub fn with_logger(mut self, logging: logging::Logger) -> Self {
+        self.logging = Some(logging);
+
+        wit::balius::app::logging::add_to_linker(&mut self.linker, |state: &mut WorkerState| {
+            state.logging.as_mut().unwrap()
         })
         .unwrap();
 
@@ -605,15 +622,21 @@ impl RuntimeBuilder {
     }
 
     pub fn build(self) -> Result<Runtime, Error> {
+        let mut this = self;
+        if this.logging.is_none() {
+            this = this.with_logger(logging::Logger::Silent);
+        }
+
         let RuntimeBuilder {
             store,
             engine,
             linker,
             ledger,
+            logging,
             kv,
             sign,
             submit,
-        } = self;
+        } = this;
 
         Ok(Runtime {
             loaded: Default::default(),
@@ -621,6 +644,7 @@ impl RuntimeBuilder {
             linker,
             store,
             ledger,
+            logging,
             kv,
             sign,
             submit,
