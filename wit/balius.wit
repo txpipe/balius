@@ -7,7 +7,7 @@ interface kv {
         internal(string),
         not-found(string)
     }
-  
+
     get-value: func(key: string) -> result<payload, kv-error>;
     set-value: func(key: string, value: payload) -> result<_, kv-error>;
     list-values: func(prefix: string) -> result<list<string>, kv-error>;
@@ -22,12 +22,12 @@ interface ledger {
         internal(string),
         not-found(txo-ref)
     }
-    
+
     record txo-ref {
         tx-hash: list<u8>,
         tx-index: u32,
     }
-    
+
     record utxo {
         body: cbor,
         ref: txo-ref,
@@ -57,7 +57,7 @@ interface ledger {
     read-params: func() -> result<json, ledger-error>;
 }
 
-/// This is identical to the WASI logging interface 
+/// This is identical to the WASI logging interface
 interface logging {
     /// A log level, describing a kind of message.
     enum level {
@@ -107,7 +107,7 @@ interface sign {
 interface submit {
     type cbor = list<u8>;
     type submit-error = u32;
-    
+
     submit-tx: func(tx: cbor) -> result<_, submit-error>;
 }
 
@@ -116,6 +116,18 @@ interface broadcast {
     type broadcast-error = u32;
 
     publish-msg: func(topic: string, payload: msg) -> result<_, broadcast-error>;
+}
+
+interface http {
+    type body = list<u8>;
+    type http-error = u32;
+
+    type header = tuple<string, string>;
+
+    get: func(url: string, headers: list<header>) -> result<body, http-error>;
+    post: func(url: string, headers: list<header>, body: body) -> result<body, http-error>;
+    patch: func(url: string, headers: list<header>, body: body) -> result<body, http-error>;
+    delete: func(url: string, headers: list<header>, body: body) -> result<body, http-error>;
 }
 
 interface driver {
@@ -191,14 +203,15 @@ world worker {
     import logging;
     import sign;
     import submit;
+    import http;
     import ledger;
-    
+
     use driver.{event, response};
 
     type config = list<u8>;
 
     export init: func(config: config);
-    
+
     record handle-error {
         message: string,
         code: u32,
