@@ -34,12 +34,14 @@ impl HttpRequest {
     }
 
     pub fn header(mut self, name: impl AsRef<str>, value: impl AsHeader) -> Self {
-        self.headers.push((name.as_ref().to_string(), value.as_bytes()));
+        self.headers
+            .push((name.as_ref().to_string(), value.into_bytes()));
         self
     }
 
     pub fn json<T: Serialize>(self, body: &T) -> Result<Self, HttpError> {
-        let body_bytes = serde_json::to_vec(body).map_err(|e| HttpError::InternalError(Some(format!("Invalid JSON: {e}"))))?;
+        let body_bytes = serde_json::to_vec(body)
+            .map_err(|e| HttpError::InternalError(Some(format!("Invalid JSON: {e}"))))?;
         Ok(Self {
             body: Some(body_bytes),
             ..self.header("content-type", "application/json")
@@ -51,16 +53,16 @@ impl HttpRequest {
             "http" => Some(wit::Scheme::Http),
             "https" => Some(wit::Scheme::Https),
             "" => None,
-            other => Some(wit::Scheme::Other(other.to_string()))
+            other => Some(wit::Scheme::Other(other.to_string())),
         };
         let authority = match self.url.authority() {
             "" => None,
-            auth => Some(auth.to_string())
+            auth => Some(auth.to_string()),
         };
         let path_and_query = match (self.url.path(), self.url.query()) {
             ("", None) => None,
             (path, None) => Some(path.to_string()),
-            (path, Some(query)) => Some(format!("{path}?{query}"))
+            (path, Some(query)) => Some(format!("{path}?{query}")),
         };
         let request = wit::OutgoingRequest {
             scheme,
@@ -70,12 +72,10 @@ impl HttpRequest {
             headers: self.headers,
             body: self.body,
         };
-        let options = self.timeout.map(|t| {
-            wit::RequestOptions {
-                connect_timeout: None,
-                first_byte_timeout: None,
-                between_bytes_timeout: Some(t.as_nanos() as u64),
-            }
+        let options = self.timeout.map(|t| wit::RequestOptions {
+            connect_timeout: None,
+            first_byte_timeout: None,
+            between_bytes_timeout: Some(t.as_nanos() as u64),
         });
         let response = wit::request(&request, options)?;
         Ok(HttpResponse {
@@ -104,34 +104,35 @@ impl HttpResponse {
     }
 
     pub fn json<'a, T: Deserialize<'a>>(&'a self) -> Result<T, HttpError> {
-        serde_json::from_slice(&self.body).map_err(|e| HttpError::InternalError(Some(format!("Invalid JSON: {e}"))))?
+        serde_json::from_slice(&self.body)
+            .map_err(|e| HttpError::InternalError(Some(format!("Invalid JSON: {e}"))))?
     }
 }
 
 pub trait AsHeader {
-    fn as_bytes(self) -> Vec<u8>;
+    fn into_bytes(self) -> Vec<u8>;
 }
 
 impl AsHeader for String {
-    fn as_bytes(self) -> Vec<u8> {
+    fn into_bytes(self) -> Vec<u8> {
         self.into_bytes()
     }
 }
 
 impl AsHeader for &str {
-    fn as_bytes(self) -> Vec<u8> {
+    fn into_bytes(self) -> Vec<u8> {
         self.as_bytes().to_vec()
     }
 }
 
 impl AsHeader for Vec<u8> {
-    fn as_bytes(self) -> Vec<u8> {
+    fn into_bytes(self) -> Vec<u8> {
         self
     }
 }
 
 impl AsHeader for &[u8] {
-    fn as_bytes(self) -> Vec<u8> {
+    fn into_bytes(self) -> Vec<u8> {
         self.to_vec()
     }
 }

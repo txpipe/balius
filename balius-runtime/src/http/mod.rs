@@ -2,9 +2,10 @@ use std::{error::Error, time::Duration};
 
 use crate::wit::balius::app::http as wit;
 use async_trait::async_trait;
-use reqwest::{header::{HeaderMap, HeaderName, HeaderValue}, Method};
-
-// pub use wit::{Body, Header, HttpError};
+use reqwest::{
+    header::{HeaderMap, HeaderName, HeaderValue},
+    Method,
+};
 
 #[derive(Clone)]
 pub enum Http {
@@ -30,11 +31,18 @@ impl wit::Host for Http {
                     Some(wit::Scheme::Http) => "http",
                     Some(wit::Scheme::Https) => "https",
                     Some(wit::Scheme::Other(scheme)) => &scheme,
-                    None => "http"
+                    None => "http",
                 };
-                let uri = match (request.authority.as_deref(), request.path_and_query.as_deref()) {
-                    (None, None) => { return Err(wit::ErrorCode::HttpRequestUriInvalid) }
-                    (auth, path) => format!("{scheme}://{}{}", auth.unwrap_or_default(), path.unwrap_or_default()),
+                let uri = match (
+                    request.authority.as_deref(),
+                    request.path_and_query.as_deref(),
+                ) {
+                    (None, None) => return Err(wit::ErrorCode::HttpRequestUriInvalid),
+                    (auth, path) => format!(
+                        "{scheme}://{}{}",
+                        auth.unwrap_or_default(),
+                        path.unwrap_or_default()
+                    ),
                 };
 
                 let method = match request.method {
@@ -47,16 +55,21 @@ impl wit::Host for Http {
                     wit::Method::Options => Method::OPTIONS,
                     wit::Method::Trace => Method::TRACE,
                     wit::Method::Patch => Method::PATCH,
-                    wit::Method::Other(name) => Method::from_bytes(name.as_bytes()).map_err(|_| wit::ErrorCode::HttpRequestMethodInvalid)?
+                    wit::Method::Other(name) => Method::from_bytes(name.as_bytes())
+                        .map_err(|_| wit::ErrorCode::HttpRequestMethodInvalid)?,
                 };
 
                 let mut header_map = HeaderMap::new();
                 for (key, value) in request.headers {
                     let header_name = HeaderName::from_bytes(key.as_bytes()).map_err(|e| {
-                        wit::ErrorCode::InternalError(Some(format!("Invalid header name \"{key}\": {e}")))
+                        wit::ErrorCode::InternalError(Some(format!(
+                            "Invalid header name \"{key}\": {e}"
+                        )))
                     })?;
                     let header_value = HeaderValue::from_bytes(&value).map_err(|e| {
-                        wit::ErrorCode::InternalError(Some(format!("Invalid header value for \"{key}\": {e}")))
+                        wit::ErrorCode::InternalError(Some(format!(
+                            "Invalid header value for \"{key}\": {e}"
+                        )))
                     })?;
                     header_map.append(header_name, header_value);
                 }
@@ -66,23 +79,34 @@ impl wit::Host for Http {
                     builder = builder.body(body);
                 }
 
-                let mut request = builder.build().map_err(|_| {
-                    wit::ErrorCode::HttpRequestUriInvalid
-                })?;
+                let mut request = builder
+                    .build()
+                    .map_err(|_| wit::ErrorCode::HttpRequestUriInvalid)?;
 
                 if let Some(timeout) = options.and_then(|o| o.between_bytes_timeout) {
                     request.timeout_mut().replace(Duration::from_nanos(timeout));
                 }
 
-                let response = client.execute(request).await.map_err(map_reqwest_response_err)?;
+                let response = client
+                    .execute(request)
+                    .await
+                    .map_err(map_reqwest_response_err)?;
 
                 let status = response.status().as_u16();
-                let headers = response.headers().into_iter().map(|(header, value)| {
-                    let key = header.to_string();
-                    let val = value.as_bytes().to_vec();
-                    (key, val)
-                }).collect();
-                let body = response.bytes().await.map_err(map_reqwest_response_err)?.to_vec();
+                let headers = response
+                    .headers()
+                    .into_iter()
+                    .map(|(header, value)| {
+                        let key = header.to_string();
+                        let val = value.as_bytes().to_vec();
+                        (key, val)
+                    })
+                    .collect();
+                let body = response
+                    .bytes()
+                    .await
+                    .map_err(map_reqwest_response_err)?
+                    .to_vec();
 
                 Ok(wit::IncomingResponse {
                     status,
@@ -100,7 +124,7 @@ fn map_reqwest_response_err(e: reqwest::Error) -> wit::ErrorCode {
     } else {
         let message = match e.source() {
             Some(source) => format!("{}: {}", e, source),
-            None => e.to_string()
+            None => e.to_string(),
         };
         wit::ErrorCode::InternalError(Some(message))
     }
