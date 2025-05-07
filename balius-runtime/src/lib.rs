@@ -18,6 +18,7 @@ mod store;
 
 // implementations
 pub mod drivers;
+pub mod http;
 pub mod kv;
 pub mod ledgers;
 pub mod logging;
@@ -239,6 +240,7 @@ struct WorkerState {
     pub kv: Option<kv::Kv>,
     pub sign: Option<sign::Signer>,
     pub submit: Option<submit::Submit>,
+    pub http: Option<http::Http>,
 }
 
 #[async_trait::async_trait]
@@ -380,6 +382,7 @@ pub struct Runtime {
     kv: Option<kv::Kv>,
     sign: Option<sign::Signer>,
     submit: Option<submit::Submit>,
+    http: Option<http::Http>,
 }
 
 impl Runtime {
@@ -422,6 +425,7 @@ impl Runtime {
                 kv: self.kv.clone(),
                 sign: self.sign.clone(),
                 submit: self.submit.clone(),
+                http: self.http.clone(),
             },
         );
 
@@ -542,6 +546,7 @@ pub struct RuntimeBuilder {
     kv: Option<kv::Kv>,
     sign: Option<sign::Signer>,
     submit: Option<submit::Submit>,
+    http: Option<http::Http>,
 }
 
 impl RuntimeBuilder {
@@ -563,6 +568,7 @@ impl RuntimeBuilder {
             kv: None,
             sign: None,
             submit: None,
+            http: None,
         }
     }
 
@@ -621,6 +627,16 @@ impl RuntimeBuilder {
         self
     }
 
+    pub fn with_http(mut self, http: http::Http) -> Self {
+        self.http = Some(http);
+        wit::balius::app::http::add_to_linker(&mut self.linker, |state: &mut WorkerState| {
+            state.http.as_mut().unwrap()
+        })
+        .unwrap();
+
+        self
+    }
+
     pub fn build(self) -> Result<Runtime, Error> {
         let mut this = self;
         if this.logging.is_none() {
@@ -636,6 +652,7 @@ impl RuntimeBuilder {
             kv,
             sign,
             submit,
+            http,
         } = this;
 
         Ok(Runtime {
@@ -648,6 +665,7 @@ impl RuntimeBuilder {
             kv,
             sign,
             submit,
+            http,
         })
     }
 }
