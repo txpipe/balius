@@ -34,4 +34,18 @@ impl wit::Host for Signer {
             }
         }
     }
+
+    async fn get_public_key(
+        &mut self,
+        key_name: String,
+        algorithm: String,
+    ) -> Result<wit::PublicKey, wit::SignError> {
+        match self {
+            Self::InMemory(signer) => signer.get_public_key(&key_name, &algorithm),
+            Self::Custom(signer) => {
+                let mut lock = signer.lock().await;
+                lock.get_public_key(key_name, algorithm).await
+            }
+        }
+    }
 }
