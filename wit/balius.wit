@@ -95,6 +95,7 @@ interface logging {
 interface sign {
     type payload = list<u8>;
     type signature = list<u8>;
+    type public-key = list<u8>;
     variant sign-error {
         internal(string),
         key-not-found(string),
@@ -102,6 +103,7 @@ interface sign {
     }
 
     sign-payload: func(key-name: string, algorithm: string, payload: payload) -> result<signature, sign-error>;
+    get-public-key: func(key-name: string, algorithm: string) -> result<public-key, sign-error>;
 }
 
 interface submit {

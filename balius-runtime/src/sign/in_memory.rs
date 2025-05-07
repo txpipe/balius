@@ -29,6 +29,17 @@ impl Signer {
         };
         key.sign_payload(algorithm, payload)
     }
+
+    pub fn get_public_key(
+        &self,
+        key_name: &str,
+        algorithm: &str,
+    ) -> Result<wit::PublicKey, wit::SignError> {
+        let Some(key) = self.keys.get(key_name) else {
+            return Err(wit::SignError::KeyNotFound(key_name.to_string()));
+        };
+        key.get_public_key(algorithm)
+    }
 }
 
 #[derive(Clone)]
@@ -59,6 +70,13 @@ impl SignerKey {
             (_, _) => Err(wit::SignError::UnsupportedAlgorithm(algorithm.to_string())),
         }
     }
+
+    fn get_public_key(&self, algorithm: &str) -> Result<wit::PublicKey, wit::SignError> {
+        match (algorithm, self) {
+            ("ed25519", Self::Ed25519(key)) => Ok(key.get_public_key()),
+            (_, _) => Err(wit::SignError::UnsupportedAlgorithm(algorithm.to_string())),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -73,5 +91,12 @@ impl Ed25519Key {
             Self::SecretKeyExtended(key) => key.sign(payload),
         };
         signature.as_ref().to_vec()
+    }
+    fn get_public_key(&self) -> wit::PublicKey {
+        let public_key = match self {
+            Self::SecretKey(key) => key.public_key(),
+            Self::SecretKeyExtended(key) => key.public_key(),
+        };
+        public_key.as_ref().to_vec()
     }
 }
