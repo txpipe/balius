@@ -2,7 +2,7 @@
 
 ## About dApps
 
-:thinking: the term "dApp" is already quite ambiguous, and now we also have "headless dApps"? WTF is a headless dApp?
+🤔 the term "dApp" is already quite ambiguous, and now we also have "headless dApps"? WTF is a headless dApp?
 
 We should probably start from the begining.
 
@@ -48,8 +48,17 @@ This strict separation of concerns provides several benefits:
 - multiple frontends: your app can have multiple frontends, maybe even developed by different teams. For example, a DEX could have different web frontends, the user could pick their favorite.
 - less plumbing: the runtime component can be quite generic and reused by many dApps. There's no need to re-implement how to query on-chain data, how to build transactions, how to submit transaction, etc. You can focus just on your business logic knowing that plumbing is already taken care of.
 
-Balius SDK is meant to provide the required artifacts to build headless Cardano dApps in a developer friendly way. It provides all of the plumbing out-of-the-box, you just need to relax and enjoy the ride.
+## The Balius Ecosystem
 
+Balius is a comprehensive ecosystem for building headless Cardano dApps with a collection of tools and libraries:
+
+- **balius-sdk**: The core SDK for building headless dApps. It provides all the basic building blocks for your business logic.
+- **balius-runtime**: A library that manages the execution environment for your dApp, handling connections to blockchain services.
+- **Tooling**:
+  - **balius**: A Cargo plugin for creating, building, and testing Balius projects.
+  - **baliusd**: The Balius daemon that can run your headless dApp in various environments.
+
+These components work together to provide all the plumbing out-of-the-box, so you can focus on your business logic knowing that the infrastructure is already taken care of.
 
 ## What does it look like?
 

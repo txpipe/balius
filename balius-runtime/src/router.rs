@@ -5,7 +5,6 @@ use crate::{
     Utxo,
 };
 
-type WorkerId = String;
 type ChannelId = u32;
 type Method = String;
 type AddressBytes = Vec<u8>;
@@ -53,7 +52,7 @@ impl Router {
         }
     }
 
-    pub fn find_utxo_targets(&self, utxo: &Utxo) -> Result<HashSet<ChannelId>, super::Error> {
+    pub fn find_utxo_targets(&self, _utxo: &Utxo) -> Result<HashSet<ChannelId>, super::Error> {
         let key = MatchKey::EveryUtxo;
 
         let targets: HashSet<_> = self
@@ -84,7 +83,7 @@ impl Router {
 
         let target = targets.iter().next().unwrap();
 
-        Ok(target.clone())
+        Ok(*target)
     }
 }
 

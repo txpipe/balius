@@ -2,12 +2,13 @@
 name = "wallet"
 version = "0.1.0"
 edition = "2021"
+publish = false
 
 [dependencies]
 balius-sdk = { path = "../../../balius-sdk" }
 serde = { version = "1.0.204", features = ["derive"] }
 serde_with = "3.9.0"
-pallas-codec = "0.31.0"
+pallas-codec = "0.32.0"
 hex = "0.4.3"
 
 [lib]
@@ -15,8 +16,8 @@ crate-type = ["cdylib"]
 
 [dev-dependencies]
 serde_json = "1.0.128"
-pallas-primitives = "0.31.0"
-pallas-traverse = "0.31.0"
+pallas-primitives = "0.32.0"
+pallas-traverse = "0.32.0"
 
 [package.metadata.release]
 release = false

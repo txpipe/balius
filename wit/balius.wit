@@ -7,7 +7,7 @@ interface kv {
         internal(string),
         not-found(string)
     }
-  
+
     get-value: func(key: string) -> result<payload, kv-error>;
     set-value: func(key: string, value: payload) -> result<_, kv-error>;
     list-values: func(prefix: string) -> result<list<string>, kv-error>;
@@ -22,12 +22,12 @@ interface ledger {
         internal(string),
         not-found(txo-ref)
     }
-    
+
     record txo-ref {
         tx-hash: list<u8>,
         tx-index: u32,
     }
-    
+
     record utxo {
         body: cbor,
         ref: txo-ref,
@@ -57,10 +57,59 @@ interface ledger {
     read-params: func() -> result<json, ledger-error>;
 }
 
+/// This is identical to the WASI logging interface
+interface logging {
+    /// A log level, describing a kind of message.
+    enum level {
+       /// Describes messages about the values of variables and the flow of
+       /// control within a program.
+       trace,
+
+       /// Describes messages likely to be of interest to someone debugging a
+       /// program.
+       debug,
+
+       /// Describes messages likely to be of interest to someone monitoring a
+       /// program.
+       info,
+
+       /// Describes messages indicating hazardous situations.
+       warn,
+
+       /// Describes messages indicating serious errors.
+       error,
+
+       /// Describes messages indicating fatal errors.
+       critical,
+    }
+
+    /// Emit a log message.
+    ///
+    /// A log message has a `level` describing what kind of message is being
+    /// sent, a context, which is an uninterpreted string meant to help
+    /// consumers group similar messages, and a string containing the message
+    /// text.
+    log: func(level: level, context: string, message: string);
+}
+
+interface sign {
+    type payload = list<u8>;
+    type signature = list<u8>;
+    type public-key = list<u8>;
+    variant sign-error {
+        internal(string),
+        key-not-found(string),
+        unsupported-algorithm(string),
+    }
+
+    sign-payload: func(key-name: string, algorithm: string, payload: payload) -> result<signature, sign-error>;
+    get-public-key: func(key-name: string, algorithm: string) -> result<public-key, sign-error>;
+}
+
 interface submit {
     type cbor = list<u8>;
     type submit-error = u32;
-    
+
     submit-tx: func(tx: cbor) -> result<_, submit-error>;
 }
 
@@ -69,6 +118,169 @@ interface broadcast {
     type broadcast-error = u32;
 
     publish-msg: func(topic: string, payload: msg) -> result<_, broadcast-error>;
+}
+
+interface http {
+    /// This type corresponds to HTTP standard Methods
+    variant method {
+        get,
+        head,
+        post,
+        put,
+        delete,
+        connect,
+        options,
+        trace,
+        patch,
+        other(string)
+    }
+
+    /// This type corresponds to HTTP standard Related Schemes.
+    variant scheme {
+        HTTP,
+        HTTPS,
+        other(string)
+    }
+
+    variant error-code {
+        DNS-timeout,
+        DNS-error(DNS-error-payload),
+        destination-not-found,
+        destination-unavailable,
+        destination-IP-prohibited,
+        destination-IP-unroutable,
+        connection-refused,
+        connection-terminated,
+        connection-timeout,
+        connection-read-timeout,
+        connection-write-timeout,
+        connection-limit-reached,
+        TLS-protocol-error,
+        TLS-certificate-error,
+        TLS-alert-received(TLS-alert-received-payload),
+        HTTP-request-denied,
+        HTTP-request-length-required,
+        HTTP-request-body-size(option<u64>),
+        HTTP-request-method-invalid,
+        HTTP-request-URI-invalid,
+        HTTP-request-URI-too-long,
+        HTTP-request-header-section-size(option<u32>),
+        HTTP-request-header-size(option<field-size-payload>),
+        HTTP-request-trailer-section-size(option<u32>),
+        HTTP-request-trailer-size(field-size-payload),
+        HTTP-response-incomplete,
+        HTTP-response-header-section-size(option<u32>),
+        HTTP-response-header-size(field-size-payload),
+        HTTP-response-body-size(option<u64>),
+        HTTP-response-trailer-section-size(option<u32>),
+        HTTP-response-trailer-size(field-size-payload),
+        HTTP-response-transfer-coding(option<string>),
+        HTTP-response-content-coding(option<string>),
+        HTTP-response-timeout,
+        HTTP-upgrade-failed,
+        HTTP-protocol-error,
+        loop-detected,
+        configuration-error,
+        /// This is a catch-all error for anything that doesn't fit cleanly into a
+        /// more specific case. It also includes an optional string for an
+        /// unstructured description of the error. Users should not depend on the
+        /// string for diagnosing errors, as it's not required to be consistent
+        /// between implementations.
+        internal-error(option<string>)
+    }
+
+    /// Defines the case payload type for `DNS-error` above:
+    record DNS-error-payload {
+        rcode: option<string>,
+        info-code: option<u16>
+    }
+
+    /// Defines the case payload type for `TLS-alert-received` above:
+    record TLS-alert-received-payload {
+        alert-id: option<u8>,
+        alert-message: option<string>
+    }
+
+    /// Defines the case payload type for `HTTP-response-{header,trailer}-size` above:
+    record field-size-payload {
+        field-name: option<string>,
+        field-size: option<u32>
+    }
+    
+
+    variant header-error {
+        /// This error indicates that a `field-name` or `field-value` was
+        /// syntactically invalid when used with an operation that sets headers in a
+        /// `fields`.
+        invalid-syntax,
+
+        /// This error indicates that a forbidden `field-name` was used when trying
+        /// to set a header in a `fields`.
+        forbidden,
+
+        /// This error indicates that the operation on the `fields` was not
+        /// permitted because the fields are immutable.
+        immutable,
+    }
+
+    /// Field names are always strings.
+    ///
+    /// Field names should always be treated as case insensitive by the `fields`
+    /// resource for the purposes of equality checking.
+    type field-name = string;
+
+    /// Field values should always be ASCII strings. However, in
+    /// reality, HTTP implementations often have to interpret malformed values,
+    /// so they are provided as a list of bytes.
+    type field-value = list<u8>;
+
+    /// Represents an outgoing HTTP Request.
+    record outgoing-request {
+        /// The HTTP Related Scheme for the Request. When `none`, the
+        /// implementation may choose an appropriate default scheme.
+        scheme: option<scheme>,
+        /// The authority of the Request's target URI. A value of `none` may be used
+        /// with Related Schemes which do not require an authority. The HTTP and
+        /// HTTPS schemes always require an authority.
+        authority: option<string>,
+        /// The combination of the HTTP Path and Query for the Request.
+        /// When `none`, this represents an empty Path and empty Query.
+        path-and-query: option<string>,
+        /// The method for the request
+        method: method,
+        /// The http headers for the request
+        headers: list<tuple<field-name, field-value>>,
+        /// The body (if any).
+        body: option<list<u8>>,
+    }
+
+    /// A duration of time, in nanoseconds.
+    type duration = u64;
+
+    record request-options {
+        /// The timeout for the initial connect to the HTTP Server.
+        connect-timeout: option<duration>,
+        /// The timeout for receiving the first byte of the Response body.
+        first-byte-timeout: option<duration>,
+        /// The timeout for receiving subsequent chunks of bytes in the Response
+        /// body stream.
+        between-bytes-timeout: option<duration>,
+    }
+
+    /// This type corresponds to the HTTP standard Status Code.
+    type status-code = u16;
+
+    /// Represents an incoming HTTP response.
+    record incoming-response {
+        /// The status code from the incoming response.
+        status: status-code,
+        /// The headers from the incoming response.
+        headers: list<tuple<field-name, field-value>>,
+        /// The incoming body.
+        body: list<u8>,
+    }
+
+    request: func(request: outgoing-request, options: option<request-options>) -> result<incoming-response, error-code>;
 }
 
 interface driver {
@@ -141,15 +353,18 @@ interface driver {
 world worker {
     import kv;
     import broadcast;
+    import logging;
+    import sign;
     import submit;
+    import http;
     import ledger;
-    
+
     use driver.{event, response};
 
     type config = list<u8>;
 
     export init: func(config: config);
-    
+
     record handle-error {
         message: string,
         code: u32,

@@ -2,7 +2,7 @@ pub mod wit {
     wit_bindgen::generate!({
         pub_export_macro: true,
         default_bindings_module: "balius_sdk::wit",
-        path: "../wit",
+        path: "./wit",
         additional_derives: [PartialEq, Eq, Hash, Clone, serde::Serialize,serde::Deserialize]
     });
 }
@@ -18,6 +18,12 @@ pub mod _internal;
 
 /// Quality of life features to make the SDK more ergonomic
 mod qol;
+
+/// An HTTP implementation
+pub mod http;
+
+/// A tracing implementation which sends logs to the server
+pub mod logging;
 
 pub use _internal::Worker;
 pub use qol::*;

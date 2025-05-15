@@ -9,6 +9,12 @@
   },
   "introduction": "Introduction",
   "quickstart": "Quickstart",
+  "-- Tools --": {
+    "type": "separator",
+    "title": "Tools"
+  },
+  "balius": "Cargo Plugin",
+  "baliusd": "Balius Daemon",
   "-- Reference --": {
     "type": "separator",
     "title": "Reference"

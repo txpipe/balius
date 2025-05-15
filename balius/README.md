@@ -1,12 +1,11 @@
 # Balius
 
-Balius is a framework for building Headless dApps on UTxO-based blockchains.
+Balius is a cargo plugin for building Headless dApps on UTxO-based blockchains.
 
-## Usage
+## How to use it
 
-Add this to your `Cargo.toml`:
+Balius includes a suite of development tools to streamline your workflow:
 
-```toml
-[dependencies]
-balius = "0.1.0"
-```
+- **cargo balius init**: Create new Balius projects
+- **cargo balius build**: Compile to WebAssembly components
+- **cargo balius test**: Test your dApp locally with a development server

@@ -106,7 +106,7 @@ where
 {
     let mut s = config::Config::builder();
 
-    // our base config will always be in /etc/dolos
+    // our base config will always be in /etc/baliusd
     s = s.add_source(config::File::with_name("/etc/baliusd/daemon.toml").required(false));
 
     // but we can override it by having a file in the working dir

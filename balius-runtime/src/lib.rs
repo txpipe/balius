@@ -1,13 +1,13 @@
 use router::Router;
-use std::{collections::HashMap, path::Path, sync::Arc};
+use std::{collections::HashMap, io::Read, path::Path, sync::Arc};
 use thiserror::Error;
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 use utxorpc::spec::sync::BlockRef;
 
-mod wit {
+pub mod wit {
     wasmtime::component::bindgen!({
-        path:"../wit",
+        path: "./wit",
         async: true,
         tracing: true,
     });
@@ -18,8 +18,11 @@ mod store;
 
 // implementations
 pub mod drivers;
+pub mod http;
 pub mod kv;
 pub mod ledgers;
+pub mod logging;
+pub mod sign;
 pub mod submit;
 
 pub use store::Store;
@@ -58,6 +61,12 @@ pub enum Error {
 
     #[error("driver error: {0}")]
     Driver(String),
+
+    #[error("failed to interact with WASM object: {0}")]
+    ObjectStoreError(object_store::Error),
+
+    #[error("failed to interact with local WASM file: {0}")]
+    IoError(std::io::Error),
 }
 
 impl From<wasmtime::Error> for Error {
@@ -104,7 +113,27 @@ impl From<redb::StorageError> for Error {
 
 impl From<pallas::ledger::addresses::Error> for Error {
     fn from(value: pallas::ledger::addresses::Error) -> Self {
-        Self::BadAddress(value.into())
+        Self::BadAddress(value)
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(value: std::io::Error) -> Self {
+        Self::IoError(value)
+    }
+}
+
+impl From<object_store::Error> for Error {
+    fn from(value: object_store::Error) -> Self {
+        match value {
+            object_store::Error::Generic { store, source } => {
+                Self::Config(format!("Failed to parse url: {}, {}", store, source))
+            }
+            object_store::Error::NotFound { path: _, source } => {
+                Self::WorkerNotFound(source.to_string())
+            }
+            x => Self::ObjectStoreError(x),
+        }
     }
 }
 
@@ -207,8 +236,11 @@ struct WorkerState {
     pub worker_id: String,
     pub router: router::Router,
     pub ledger: Option<ledgers::Ledger>,
+    pub logging: Option<logging::Logger>,
     pub kv: Option<kv::Kv>,
+    pub sign: Option<sign::Signer>,
     pub submit: Option<submit::Submit>,
+    pub http: Option<http::Http>,
 }
 
 #[async_trait::async_trait]
@@ -346,8 +378,11 @@ pub struct Runtime {
 
     store: store::Store,
     ledger: Option<ledgers::Ledger>,
+    logging: Option<logging::Logger>,
     kv: Option<kv::Kv>,
+    sign: Option<sign::Signer>,
     submit: Option<submit::Submit>,
+    http: Option<http::Http>,
 }
 
 impl Runtime {
@@ -361,8 +396,7 @@ impl Runtime {
             .lock()
             .await
             .values()
-            .map(|w| w.cursor)
-            .flatten()
+            .flat_map(|w| w.cursor)
             .min();
 
         if let Some(seq) = lowest_seq {
@@ -374,12 +408,12 @@ impl Runtime {
     }
 
     pub async fn register_worker(
-        &mut self,
+        &self,
         id: &str,
-        wasm_path: impl AsRef<Path>,
+        wasm: &[u8],
         config: serde_json::Value,
     ) -> Result<(), Error> {
-        let component = wasmtime::component::Component::from_file(&self.engine, wasm_path)?;
+        let component = wasmtime::component::Component::new(&self.engine, wasm)?;
 
         let mut wasm_store = wasmtime::Store::new(
             &self.engine,
@@ -387,8 +421,11 @@ impl Runtime {
                 worker_id: id.to_owned(),
                 router: Router::new(),
                 ledger: self.ledger.clone(),
+                logging: self.logging.clone(),
                 kv: self.kv.clone(),
+                sign: self.sign.clone(),
                 submit: self.submit.clone(),
+                http: self.http.clone(),
             },
         );
 
@@ -409,6 +446,46 @@ impl Runtime {
                 cursor,
             },
         );
+
+        Ok(())
+    }
+
+    /// Register worker into runtime using URL.
+    ///
+    /// Will download bytes from URL and interpret it as WASM. URL support is
+    /// determined by build features passed on to the [object_store](https://docs.rs/crate/object_store/latest) crate.
+    pub async fn register_worker_from_url(
+        &self,
+        id: &str,
+        url: &url::Url,
+        config: serde_json::Value,
+    ) -> Result<(), Error> {
+        let (store, path) = object_store::parse_url(url)?;
+        let bytes = store.get(&path).await?.bytes().await?;
+        self.register_worker(id, &bytes, config).await
+    }
+
+    pub async fn register_worker_from_file(
+        &self,
+        id: &str,
+        wasm_path: impl AsRef<Path>,
+        config: serde_json::Value,
+    ) -> Result<(), Error> {
+        let mut file = std::fs::File::open(wasm_path)?;
+        let mut buffer = Vec::new();
+        file.read_to_end(&mut buffer)?;
+        self.register_worker(id, &buffer, config).await
+    }
+
+    pub async fn remove_worker(&self, id: &str) -> Result<(), Error> {
+        match self.loaded.lock().await.remove(id) {
+            Some(_) => {
+                info!(worker = id, "Successfully removed worker from runtime.")
+            }
+            None => {
+                warn!(worker = id, "Worker not found, skipping remove.")
+            }
+        }
 
         Ok(())
     }
@@ -465,8 +542,11 @@ pub struct RuntimeBuilder {
     engine: wasmtime::Engine,
     linker: wasmtime::component::Linker<WorkerState>,
     ledger: Option<ledgers::Ledger>,
+    logging: Option<logging::Logger>,
     kv: Option<kv::Kv>,
+    sign: Option<sign::Signer>,
     submit: Option<submit::Submit>,
+    http: Option<http::Http>,
 }
 
 impl RuntimeBuilder {
@@ -484,8 +564,11 @@ impl RuntimeBuilder {
             engine,
             linker,
             ledger: None,
+            logging: None,
             kv: None,
+            sign: None,
             submit: None,
+            http: None,
         }
     }
 
@@ -511,6 +594,28 @@ impl RuntimeBuilder {
         self
     }
 
+    pub fn with_logger(mut self, logging: logging::Logger) -> Self {
+        self.logging = Some(logging);
+
+        wit::balius::app::logging::add_to_linker(&mut self.linker, |state: &mut WorkerState| {
+            state.logging.as_mut().unwrap()
+        })
+        .unwrap();
+
+        self
+    }
+
+    pub fn with_signer(mut self, sign: sign::Signer) -> Self {
+        self.sign = Some(sign);
+
+        wit::balius::app::sign::add_to_linker(&mut self.linker, |state: &mut WorkerState| {
+            state.sign.as_mut().unwrap()
+        })
+        .unwrap();
+
+        self
+    }
+
     pub fn with_submit(mut self, submit: submit::Submit) -> Self {
         self.submit = Some(submit);
 
@@ -522,15 +627,33 @@ impl RuntimeBuilder {
         self
     }
 
+    pub fn with_http(mut self, http: http::Http) -> Self {
+        self.http = Some(http);
+        wit::balius::app::http::add_to_linker(&mut self.linker, |state: &mut WorkerState| {
+            state.http.as_mut().unwrap()
+        })
+        .unwrap();
+
+        self
+    }
+
     pub fn build(self) -> Result<Runtime, Error> {
+        let mut this = self;
+        if this.logging.is_none() {
+            this = this.with_logger(logging::Logger::Silent);
+        }
+
         let RuntimeBuilder {
             store,
             engine,
             linker,
             ledger,
+            logging,
             kv,
+            sign,
             submit,
-        } = self;
+            http,
+        } = this;
 
         Ok(Runtime {
             loaded: Default::default(),
@@ -538,8 +661,11 @@ impl RuntimeBuilder {
             linker,
             store,
             ledger,
+            logging,
             kv,
+            sign,
             submit,
+            http,
         })
     }
 }
