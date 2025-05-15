@@ -1,6 +1,8 @@
 use std::marker::PhantomData;
 
+use pallas_primitives::Fragment;
 use thiserror::Error;
+use utxorpc_spec::utxorpc::v1alpha::cardano::PParams;
 
 use crate::_internal::Handler;
 use crate::wit;
@@ -9,18 +11,24 @@ use crate::wit;
 pub enum Error {
     #[error("internal error: {0}")]
     Internal(String),
+
     #[error("bad config")]
     BadConfig,
+
     #[error("bad params")]
     BadParams,
+
     #[error("bad utxo")]
     BadUtxo,
+
     #[error("event mismatch, expected {0}")]
     EventMismatch(String),
+
     #[error("kv error: {0}")]
-    KV(wit::balius::app::kv::KvError),
+    KV(#[from] wit::balius::app::kv::KvError),
+
     #[error("ledger error: {0}")]
-    Ledger(wit::balius::app::ledger::LedgerError),
+    Ledger(#[from] wit::balius::app::ledger::LedgerError),
 }
 
 impl From<Error> for wit::HandleError {
@@ -60,24 +68,6 @@ impl From<Error> for wit::HandleError {
 
 impl From<serde_json::Error> for Error {
     fn from(error: serde_json::Error) -> Self {
-        Error::Internal(error.to_string())
-    }
-}
-
-impl From<wit::balius::app::kv::KvError> for Error {
-    fn from(error: wit::balius::app::kv::KvError) -> Self {
-        Error::KV(error)
-    }
-}
-
-impl From<wit::balius::app::ledger::LedgerError> for Error {
-    fn from(error: wit::balius::app::ledger::LedgerError) -> Self {
-        Error::Ledger(error)
-    }
-}
-
-impl From<crate::txbuilder::BuildError> for Error {
-    fn from(error: crate::txbuilder::BuildError) -> Self {
         Error::Internal(error.to_string())
     }
 }
@@ -254,19 +244,6 @@ impl<D> TryFrom<wit::Event> for Utxo<D> {
             utxo,
             datum: None,
         })
-    }
-}
-
-pub struct NewTx(pub Box<dyn crate::txbuilder::TxExpr>);
-
-impl TryInto<wit::Response> for NewTx {
-    type Error = Error;
-
-    fn try_into(self) -> Result<wit::Response, Self::Error> {
-        let ledger = crate::txbuilder::ExtLedgerFacade;
-        let tx = crate::txbuilder::build(self.0, ledger)?;
-        let cbor = pallas_codec::minicbor::to_vec(&tx).unwrap();
-        Ok(wit::Response::PartialTx(cbor))
     }
 }
 

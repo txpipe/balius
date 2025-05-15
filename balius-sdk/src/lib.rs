@@ -13,9 +13,6 @@ pub use balius_macros as macros;
 /// Macro to mark the main function for the worker
 pub use balius_macros::main;
 
-/// Transaction builder artifacts
-pub mod txbuilder;
-
 /// Internal functions to be used by the generated code
 pub mod _internal;
 
