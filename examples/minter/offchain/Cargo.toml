@@ -5,11 +5,18 @@ edition = "2021"
 
 [dependencies]
 balius-sdk = { path = "../../../balius-sdk" }
+hex = "0.4.3"
 serde = { version = "1.0.204", features = ["derive"] }
 serde_with = "3.9.0"
+tx3-lang = { version = "0.1.0", path = "../../../../tx3/crates/tx3-lang" }
+pallas-addresses = "0.31.0"
 
 [lib]
 crate-type = ["cdylib"]
+
+[profile.release]
+lto = true
+opt-level = 's'
 
 [dev-dependencies]
 hex = "0.4.3"
@@ -17,6 +24,10 @@ serde_json = "1.0.128"
 pallas-traverse = "0.31.0"
 pallas-codec = "0.31.0"
 pallas-primitives = "0.31.0"
+tx3-vm = { version = "0.1.0", path = "../../../../tx3/crates/tx3-vm" }
+
+[build-dependencies]
+tx3-build = { version = "0.1.0", path = "../../../../tx3/crates/tx3-build" }
 
 [package.metadata.release]
 release = false

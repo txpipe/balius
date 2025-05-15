@@ -59,8 +59,10 @@ interface ledger {
 
 interface submit {
     type cbor = list<u8>;
+    type tir = list<u8>;
     type submit-error = u32;
     
+    resolve-tx: func(prototx: tir) -> result<cbor, submit-error>;
     submit-tx: func(tx: cbor) -> result<_, submit-error>;
 }
 
@@ -132,7 +134,7 @@ interface driver {
         acknowledge,
         json(json),
         cbor(cbor),
-        partial-tx(cbor)
+        tx(cbor),
     }
 
     register-channel: func(id: u32, pattern: event-pattern);

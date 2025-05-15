@@ -55,7 +55,7 @@ fn build() {
     cmd.arg("build");
     cmd.arg("--target");
     cmd.arg("wasm32-unknown-unknown");
-
+    cmd.arg("--release");
     let status = cmd.status().unwrap();
 
     if !status.success() {
@@ -66,7 +66,7 @@ fn build() {
 
     let (target_dir, package_name) = get_project_info();
     let wasm_file = target_dir.join(format!(
-        "wasm32-unknown-unknown/debug/{}.wasm",
+        "wasm32-unknown-unknown/release/{}.wasm",
         package_name
     ));
 

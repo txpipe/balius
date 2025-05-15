@@ -18,13 +18,13 @@ name = "faucet"
 module = "../bin/faucet.wasm"
 config = "faucet.json"
 
-[[workers]]
-name = "wallet"
-module = "../bin/wallet.wasm"
-config = "wallet.json"
+# [[workers]]
+# name = "wallet"
+# module = "../bin/wallet.wasm"
+# config = "wallet.json"
 
 
-[[workers]]
-name = "asteria"
-module = "../bin/asteria.wasm"
-config = "asteria.json"
+# [[workers]]
+# name = "asteria"
+# module = "../bin/asteria.wasm"
+# config = "asteria.json"
