@@ -146,6 +146,26 @@ pub enum ChainPoint {
 
 pub type LogSeq = u64;
 
+pub enum TxInput {
+    Cardano(utxorpc::spec::cardano::TxInput),
+}
+
+impl TxInput {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        use prost::Message;
+
+        match self {
+            Self::Cardano(tx_input) => tx_input.encode_to_vec(),
+        }
+    }
+
+    pub fn address(&self) -> Option<Vec<u8>> {
+        match self {
+            Self::Cardano(tx_input) => tx_input.as_output.as_ref().map(|o| o.address.to_vec()),
+        }
+    }
+}
+
 pub enum Utxo {
     Cardano(utxorpc::spec::cardano::TxOutput),
 }
@@ -156,6 +176,12 @@ impl Utxo {
 
         match self {
             Self::Cardano(utxo) => utxo.encode_to_vec(),
+        }
+    }
+
+    pub fn address(&self) -> Option<Vec<u8>> {
+        match self {
+            Self::Cardano(utxo) => Some(utxo.address.to_vec()),
         }
     }
 }
@@ -170,6 +196,15 @@ impl Tx {
             Self::Cardano(tx) => tx.hash.clone().into(),
         }
     }
+    pub fn inputs(&self) -> Vec<TxInput> {
+        match self {
+            Self::Cardano(tx) => tx
+                .inputs
+                .iter()
+                .map(|i| TxInput::Cardano(i.clone()))
+                .collect(),
+        }
+    }
     pub fn outputs(&self) -> Vec<Utxo> {
         match self {
             Self::Cardano(tx) => tx
@@ -177,6 +212,13 @@ impl Tx {
                 .iter()
                 .map(|o| Utxo::Cardano(o.clone()))
                 .collect(),
+        }
+    }
+    pub fn to_bytes(&self) -> Vec<u8> {
+        use prost::Message;
+
+        match self {
+            Self::Cardano(tx) => tx.encode_to_vec(),
         }
     }
 }
@@ -296,8 +338,23 @@ impl LoadedWorker {
         let block_height = block.height();
         for tx in block.txs() {
             let tx_hash = tx.hash();
+            let channels = self.wasm_store.data().router.find_tx_targets(&tx);
+            if !channels.is_empty() {
+                let event = wit::Event::Tx(wit::balius::app::driver::Tx {
+                    block: wit::balius::app::driver::BlockRef {
+                        block_hash: block_hash.clone(),
+                        block_height,
+                    },
+                    body: tx.to_bytes(),
+                    hash: tx_hash.clone(),
+                });
+                for channel in channels {
+                    self.acknowledge_event(channel, &event).await?;
+                }
+            }
+
             for (index, utxo) in tx.outputs().into_iter().enumerate() {
-                let channels = self.wasm_store.data().router.find_utxo_targets(&utxo)?;
+                let channels = self.wasm_store.data().router.find_utxo_targets(&utxo);
                 if channels.is_empty() {
                     continue;
                 }
@@ -328,8 +385,8 @@ impl LoadedWorker {
         let block_height = block.height();
         for tx in block.txs() {
             let tx_hash = tx.hash();
-            for (index, utxo) in tx.outputs().into_iter().enumerate() {
-                let channels = self.wasm_store.data().router.find_utxo_targets(&utxo)?;
+            for (index, utxo) in tx.outputs().into_iter().enumerate().rev() {
+                let channels = self.wasm_store.data().router.find_utxo_targets(&utxo);
                 if channels.is_empty() {
                     continue;
                 }
@@ -346,6 +403,21 @@ impl LoadedWorker {
                     },
                 });
 
+                for channel in channels {
+                    self.acknowledge_event(channel, &event).await?;
+                }
+            }
+
+            let channels = self.wasm_store.data().router.find_tx_targets(&tx);
+            if !channels.is_empty() {
+                let event = wit::Event::TxUndo(wit::balius::app::driver::Tx {
+                    block: wit::balius::app::driver::BlockRef {
+                        block_hash: block_hash.clone(),
+                        block_height,
+                    },
+                    body: tx.to_bytes(),
+                    hash: tx_hash.clone(),
+                });
                 for channel in channels {
                     self.acknowledge_event(channel, &event).await?;
                 }
