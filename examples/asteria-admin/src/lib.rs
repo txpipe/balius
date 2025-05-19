@@ -1,9 +1,8 @@
 use balius_sdk::{
-    txbuilder::{self, FeeChangeReturn, MinUtxoLovelace, OutputBuilder, TxBuilder, UtxoSource},
-    Config, FnHandler, Json, NewTx, Params, WorkerResult,
+    txbuilder::{TxBuilder, UtxoSource},
+    Config, FnHandler, NewTx, Params, WorkerResult,
 };
 
-use pallas_primitives::PlutusScript;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -14,7 +13,7 @@ struct CreateShipRequest {
     fuel_source: UtxoSource,
 }
 
-fn create_ship(_: Config<AdminConfig>, req: Params<CreateShipRequest>) -> WorkerResult<NewTx> {
+fn create_ship(_: Config<AdminConfig>, _req: Params<CreateShipRequest>) -> WorkerResult<NewTx> {
     let tx = TxBuilder::new();
     Ok(NewTx(Box::new(tx)))
 }

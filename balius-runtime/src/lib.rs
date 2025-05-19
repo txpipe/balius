@@ -36,7 +36,7 @@ pub enum Error {
     Wasm(wasmtime::Error),
 
     #[error("store error {0}")]
-    Store(redb::Error),
+    Store(Box<redb::Error>),
 
     #[error("worker not found '{0}'")]
     WorkerNotFound(WorkerId),
@@ -77,37 +77,37 @@ impl From<wasmtime::Error> for Error {
 
 impl From<redb::Error> for Error {
     fn from(value: redb::Error) -> Self {
-        Self::Store(value)
+        Self::Store(Box::new(value))
     }
 }
 
 impl From<redb::DatabaseError> for Error {
     fn from(value: redb::DatabaseError) -> Self {
-        Self::Store(value.into())
+        Self::Store(Box::new(value.into()))
     }
 }
 
 impl From<redb::TransactionError> for Error {
     fn from(value: redb::TransactionError) -> Self {
-        Self::Store(value.into())
+        Self::Store(Box::new(value.into()))
     }
 }
 
 impl From<redb::TableError> for Error {
     fn from(value: redb::TableError) -> Self {
-        Self::Store(value.into())
+        Self::Store(Box::new(value.into()))
     }
 }
 
 impl From<redb::CommitError> for Error {
     fn from(value: redb::CommitError) -> Self {
-        Self::Store(value.into())
+        Self::Store(Box::new(value.into()))
     }
 }
 
 impl From<redb::StorageError> for Error {
     fn from(value: redb::StorageError) -> Self {
-        Self::Store(value.into())
+        Self::Store(Box::new(value.into()))
     }
 }
 

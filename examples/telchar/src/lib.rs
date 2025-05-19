@@ -1,6 +1,6 @@
 use balius_sdk::{
-    txbuilder::{self, FeeChangeReturn, MinUtxoLovelace, OutputBuilder, TxBuilder, UtxoSource},
-    Config, FnHandler, Json, NewTx, Params, WorkerResult,
+    txbuilder::{FeeChangeReturn, MinUtxoLovelace, OutputBuilder, TxBuilder, UtxoSource},
+    Config, FnHandler, NewTx, Params, WorkerResult,
 };
 
 use pallas_primitives::PlutusScript;

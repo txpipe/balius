@@ -10,6 +10,7 @@ pub mod u5c;
 pub use wit::{Host as CustomLedger, LedgerError, TxoRef, Utxo, UtxoPage, UtxoPattern};
 
 #[derive(Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum Ledger {
     Mock(mock::Ledger),
     U5C(u5c::Ledger),

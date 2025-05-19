@@ -21,22 +21,10 @@ pub fn setup_tracing(config: &LoggingConfig) -> miette::Result<()> {
             .with_target("runtime", level);
     }
 
-    #[cfg(not(feature = "debug"))]
-    {
-        tracing_subscriber::registry()
-            .with(tracing_subscriber::fmt::layer())
-            .with(filter)
-            .init();
-    }
-
-    #[cfg(feature = "debug")]
-    {
-        tracing_subscriber::registry()
-            .with(tracing_subscriber::fmt::layer())
-            .with(console_subscriber::spawn())
-            .with(filter)
-            .init();
-    }
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer())
+        .with(filter)
+        .init();
 
     Ok(())
 }
