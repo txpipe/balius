@@ -1,3 +1,4 @@
+#[allow(clippy::too_many_arguments)]
 pub mod wit {
     wit_bindgen::generate!({
         pub_export_macro: true,

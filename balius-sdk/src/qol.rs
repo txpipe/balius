@@ -303,11 +303,7 @@ impl crate::_internal::Worker {
         self.config = Some(config);
     }
 
-    pub fn with_request_handler(
-        mut self,
-        method: &str,
-        handler: impl Handler + Send + Sync + 'static,
-    ) -> Self {
+    pub fn with_request_handler(mut self, method: &str, handler: impl Handler + 'static) -> Self {
         self.channels.insert(
             self.channels.len() as u32,
             crate::_internal::Channel {
@@ -322,7 +318,7 @@ impl crate::_internal::Worker {
     pub fn with_utxo_handler(
         mut self,
         pattern: wit::balius::app::driver::UtxoPattern,
-        handler: impl Handler + Send + Sync + 'static,
+        handler: impl Handler + 'static,
     ) -> Self {
         self.channels.insert(
             self.channels.len() as u32,

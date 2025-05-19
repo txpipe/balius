@@ -30,7 +30,7 @@ impl wit::Host for Http {
                 let scheme = match &request.scheme {
                     Some(wit::Scheme::Http) => "http",
                     Some(wit::Scheme::Https) => "https",
-                    Some(wit::Scheme::Other(scheme)) => &scheme,
+                    Some(wit::Scheme::Other(scheme)) => scheme,
                     None => "http",
                 };
                 let uri = match (

@@ -1,7 +1,6 @@
 use pallas_primitives::conway;
 use pallas_traverse::MultiEraOutput;
 use serde::{Deserialize, Serialize};
-use serde_json::from_str;
 use serde_with::{serde_as, DisplayFromStr};
 use std::collections::{HashMap, HashSet};
 
@@ -149,9 +148,9 @@ impl From<Hash<28>> for AssetPolicyId {
     }
 }
 
-impl Into<Hash<28>> for AssetPolicyId {
-    fn into(self) -> Hash<28> {
-        self.0
+impl From<AssetPolicyId> for Hash<28> {
+    fn from(value: AssetPolicyId) -> Self {
+        value.0
     }
 }
 
@@ -245,11 +244,11 @@ impl From<crate::wit::balius::app::ledger::TxoRef> for TxoRef {
     }
 }
 
-impl Into<crate::wit::balius::app::ledger::TxoRef> for TxoRef {
-    fn into(self) -> crate::wit::balius::app::ledger::TxoRef {
+impl From<TxoRef> for crate::wit::balius::app::ledger::TxoRef {
+    fn from(value: TxoRef) -> crate::wit::balius::app::ledger::TxoRef {
         crate::wit::balius::app::ledger::TxoRef {
-            tx_hash: self.hash.to_vec(),
-            tx_index: self.index as u32,
+            tx_hash: value.hash.to_vec(),
+            tx_index: value.index as u32,
         }
     }
 }
@@ -266,11 +265,11 @@ impl dsl::InputExpr for TxoRef {
     }
 }
 
-impl Into<conway::TransactionInput> for &TxoRef {
-    fn into(self) -> conway::TransactionInput {
+impl From<&TxoRef> for conway::TransactionInput {
+    fn from(value: &TxoRef) -> Self {
         conway::TransactionInput {
-            transaction_id: self.hash.into(),
-            index: self.index,
+            transaction_id: value.hash,
+            index: value.index,
         }
     }
 }
@@ -385,7 +384,7 @@ pub trait AddressExpr: 'static + Send + Sync {
 
 impl AddressExpr for &'static str {
     fn eval(&self, _ctx: &BuildContext) -> Result<Address, BuildError> {
-        Address::from_bech32(*self).map_err(|_| BuildError::MalformedAddress)
+        Address::from_bech32(self).map_err(|_| BuildError::MalformedAddress)
     }
 }
 
@@ -792,7 +791,7 @@ impl TxExpr for TxBuilder {
                     .map(|m| m.eval(ctx))
                     .collect::<Result<Vec<_>, _>>()?
                     .into_iter()
-                    .filter_map(|m| m);
+                    .flatten();
 
                 asset_math::aggregate_assets(mints)
             },
@@ -832,7 +831,7 @@ impl TxExpr for TxBuilder {
                     .map(|m| m.eval_redeemer(ctx))
                     .collect::<Result<Vec<_>, _>>()?
                     .into_iter()
-                    .filter_map(|r| r)
+                    .flatten()
                     .collect();
 
                 if redeemers.is_empty() {

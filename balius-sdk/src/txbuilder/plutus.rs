@@ -4,7 +4,7 @@ pub use pallas_codec::utils::Int;
 pub use pallas_primitives::{BigInt, BoundedBytes, Constr, MaybeIndefArray, PlutusData};
 
 pub trait IntoData {
-    fn into_data(&self) -> PlutusData;
+    fn into_data(self) -> PlutusData;
 }
 
 #[macro_export]
@@ -25,27 +25,28 @@ macro_rules! constr {
 }
 
 impl<const N: usize> IntoData for [u8; N] {
-    fn into_data(&self) -> PlutusData {
+    fn into_data(self) -> PlutusData {
         PlutusData::BoundedBytes(BoundedBytes::from(self.to_vec()))
     }
 }
 
 impl IntoData for Vec<u8> {
-    fn into_data(&self) -> PlutusData {
+    fn into_data(self) -> PlutusData {
         PlutusData::BoundedBytes(BoundedBytes::from(self.clone()))
     }
 }
 
 impl IntoData for u64 {
-    fn into_data(&self) -> PlutusData {
-        PlutusData::BigInt(BigInt::Int(Int::from(*self as i64)))
+    fn into_data(self) -> PlutusData {
+        PlutusData::BigInt(BigInt::Int(Int::from(self as i64)))
     }
 }
 
 mod test {
     use super::*;
 
+    #[allow(dead_code)]
     fn construct_constr() {
-        let x = constr!(0, b"abc", vec![1, 2, 3]);
+        let _ = constr!(0, b"abc", vec![1, 2, 3]);
     }
 }

@@ -1,7 +1,6 @@
-use cargo_metadata::{CargoOpt, MetadataCommand};
-use proc_macro2::TokenStream;
 use serde::{Deserialize, Serialize};
 
+#[allow(unused)]
 fn plutus_codegen() -> String {
     let code = quote::quote! {};
 
@@ -31,7 +30,7 @@ mod plutus_blueprints {
             }
 
             impl plutus::IntoData for AssetClass {
-                fn into_data(&self) -> plutus::PlutusData {
+                fn into_data(self) -> plutus::PlutusData {
                     balius_sdk::constr!(0, self.policy, self.name)
                 }
             }
@@ -48,8 +47,9 @@ mod plutus_blueprints {
             pub struct AsteriaSpendValidator;
 
             impl AsteriaSpendValidator {
+                #[allow(unused)]
                 pub fn compiled_code() -> &'static [u8] {
-                    &ASTERIA_SPEND_COMPILED_CODE
+                    ASTERIA_SPEND_COMPILED_CODE
                 }
 
                 pub fn apply_params(params: AsteriaSpendParameters) -> Vec<u8> {
@@ -71,14 +71,10 @@ mod plutus_blueprints {
                 }
             }
 
+            #[allow(unused)]
             pub struct AsteriaSpendDatum {}
         }
     }
-}
-
-mod telchar {
-    use balius_sdk::txbuilder::primitives::PlutusScript;
-    use balius_sdk::txbuilder::{MinUtxoLovelace, OutputBuilder, TxBuilder, UtxoSource};
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -124,10 +120,10 @@ fn main() {
         }
     }
 
-    let script_bytes = {
-        let path = std::path::Path::new("asteria.asteria.spend.uplc");
-        std::fs::read(path).expect("Failed to read validator script file")
-    };
+    // let script_bytes = {
+    //     let path = std::path::Path::new("asteria.asteria.spend.uplc");
+    //     std::fs::read(path).expect("Failed to read validator script file")
+    // };
 
     // Get the output directory from cargo
     //let out_dir = std::env::var("OUT_DIR").unwrap();

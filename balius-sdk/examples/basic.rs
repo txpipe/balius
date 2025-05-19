@@ -14,7 +14,10 @@ struct FaucetRequest {
     fuel: String,
 }
 
-fn on_request(config: Config<FaucetConfig>, params: Params<FaucetRequest>) -> WorkerResult<NewTx> {
+fn on_request(
+    _config: Config<FaucetConfig>,
+    _params: Params<FaucetRequest>,
+) -> WorkerResult<NewTx> {
     todo!()
 }
 

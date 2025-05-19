@@ -120,7 +120,7 @@ pub fn add_mint(value: &Value, mint: &conway::Mint) -> Result<Value, BuildError>
             }
         }
         if let Some(assets) = NonEmptyKeyValuePairs::from_vec(policy_assets) {
-            final_assets.push((policy.clone(), assets));
+            final_assets.push((*policy, assets));
         }
     }
 
