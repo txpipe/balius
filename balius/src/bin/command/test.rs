@@ -94,18 +94,17 @@ async fn run_project_with_config(
         .into_diagnostic()
         .context("opening store")?;
 
-    let ledger = ledgers::u5c::Ledger::new({
-        ledgers::u5c::Config {
-            endpoint_url: utxo_url.clone(),
-            headers: Some(HashMap::from([(
-                "dmtr-api-key".to_string(),
-                utxo_api_key.to_string(),
-            )])),
-        }
-    })
-    .await
-    .into_diagnostic()
-    .context("setting up ledger")?;
+    let config = ledgers::u5c::Config {
+        endpoint_url: utxo_url.clone(),
+        headers: Some(HashMap::from([(
+            "dmtr-api-key".to_string(),
+            utxo_api_key.to_string(),
+        )])),
+    };
+    let ledger = ledgers::u5c::Ledger::new(&config)
+        .await
+        .into_diagnostic()
+        .context("setting up ledger")?;
 
     let runtime = Runtime::builder(store)
         .with_ledger(ledger.into())

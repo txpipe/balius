@@ -162,6 +162,14 @@ impl TryFrom<Ack> for wit::Response {
         Ok(wit::Response::Acknowledge)
     }
 }
+// Consider empty response as an acknowledgedment.
+impl TryFrom<()> for wit::Response {
+    type Error = Error;
+
+    fn try_from(_: ()) -> Result<Self, Self::Error> {
+        Ok(wit::Response::Acknowledge)
+    }
+}
 
 pub struct Config<T>(pub T);
 

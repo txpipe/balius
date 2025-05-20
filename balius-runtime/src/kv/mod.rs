@@ -11,6 +11,8 @@ pub enum Kv {
     Custom(Arc<Mutex<dyn wit::Host + Send + Sync>>),
 }
 
+pub mod memory;
+
 #[async_trait::async_trait]
 impl wit::Host for Kv {
     async fn get_value(&mut self, key: String) -> Result<Payload, KvError> {

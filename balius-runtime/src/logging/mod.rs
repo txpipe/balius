@@ -5,6 +5,8 @@ use tokio::sync::Mutex;
 
 use crate::wit::balius::app::logging as wit;
 
+pub mod file;
+
 #[derive(Clone)]
 pub enum Logger {
     Silent,

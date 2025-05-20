@@ -1,9 +1,10 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
-use balius_runtime::{drivers, ledgers, Runtime, Store};
+use balius_runtime::{drivers, ledgers, logging::file::FileLogger, Runtime, Store};
 use miette::{Context as _, IntoDiagnostic as _};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
+use tokio::sync::Mutex;
 use tracing::info;
 
 mod boilerplate;
@@ -16,6 +17,27 @@ pub struct LoggingConfig {
 
     #[serde(default)]
     include_tokio: bool,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(tag = "type")]
+#[serde(rename_all = "lowercase")]
+pub enum KvConfig {
+    Memory,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct FileLoggerConfig {
+    pub path: String,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(tag = "type")]
+#[serde(rename_all = "lowercase")]
+pub enum LoggerConfig {
+    Silent,
+    Tracing,
+    File(FileLoggerConfig),
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -34,6 +56,31 @@ pub struct Config {
     pub chainsync: drivers::chainsync::Config,
     pub workers: Vec<WorkerConfig>,
     pub logging: LoggingConfig,
+    pub kv: Option<KvConfig>,
+    pub logger: Option<LoggerConfig>,
+}
+
+impl From<&Config> for balius_runtime::kv::Kv {
+    fn from(value: &Config) -> Self {
+        match value.kv {
+            Some(KvConfig::Memory) => balius_runtime::kv::Kv::Custom(Arc::new(Mutex::new(
+                balius_runtime::kv::memory::MemoryKv::default(),
+            ))),
+            None => balius_runtime::kv::Kv::Mock,
+        }
+    }
+}
+impl From<&Config> for balius_runtime::logging::Logger {
+    fn from(value: &Config) -> Self {
+        match &value.logger {
+            Some(LoggerConfig::Silent) => balius_runtime::logging::Logger::Silent,
+            Some(LoggerConfig::Tracing) => balius_runtime::logging::Logger::Tracing,
+            Some(LoggerConfig::File(cfg)) => balius_runtime::logging::Logger::Custom(Arc::new(
+                Mutex::new(FileLogger::try_new(&cfg.path).expect("cant open log file")),
+            )),
+            None => balius_runtime::logging::Logger::Silent,
+        }
+    }
 }
 
 fn load_worker_config(config_path: Option<PathBuf>) -> miette::Result<serde_json::Value> {
@@ -63,14 +110,15 @@ async fn main() -> miette::Result<()> {
         .into_diagnostic()
         .context("opening store")?;
 
-    let ledger = ledgers::u5c::Ledger::new(config.ledger)
+    let ledger = ledgers::u5c::Ledger::new(&config.ledger)
         .await
         .into_diagnostic()
         .context("setting up ledger")?;
 
     let runtime = Runtime::builder(store)
         .with_ledger(ledger.into())
-        .with_kv(balius_runtime::kv::Kv::Mock)
+        .with_kv((&config).into())
+        .with_logger((&config).into())
         .build()
         .into_diagnostic()
         .context("setting up runtime")?;

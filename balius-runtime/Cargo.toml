@@ -8,6 +8,7 @@ license = "Apache-2.0"
 repository = "https://github.com/txpipe/balius"
 
 [dependencies]
+chrono = "0.4.41"
 thiserror = "2.0.11"
 wasmtime = { version = "28.0.1" }
 warp = { version = "0.3.7" }
