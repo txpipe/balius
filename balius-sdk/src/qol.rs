@@ -15,6 +15,8 @@ pub enum Error {
     BadParams,
     #[error("bad utxo")]
     BadUtxo,
+    #[error("bad tx")]
+    BadTx,
     #[error("event mismatch, expected {0}")]
     EventMismatch(String),
     #[error("kv error: {0}")]
@@ -62,8 +64,12 @@ impl From<Error> for wit::HandleError {
                 code: 7,
                 message: "bad utxo".to_owned(),
             },
-            Error::EventMismatch(x) => wit::HandleError {
+            Error::BadTx => wit::HandleError {
                 code: 8,
+                message: "bad tx".to_owned(),
+            },
+            Error::EventMismatch(x) => wit::HandleError {
+                code: 9,
                 message: format!("event mismatch, expected {}", x),
             },
         }
@@ -281,6 +287,39 @@ impl<D> TryFrom<wit::Event> for Utxo<D> {
     }
 }
 
+pub struct Tx {
+    pub block_hash: Vec<u8>,
+    pub block_height: u64,
+    pub hash: Vec<u8>,
+    pub tx: utxorpc_spec::utxorpc::v1alpha::cardano::Tx,
+}
+
+impl TryFrom<wit::Event> for Tx {
+    type Error = Error;
+
+    fn try_from(value: wit::Event) -> Result<Self, Self::Error> {
+        use prost::Message;
+
+        let tx = match value {
+            wit::Event::Tx(x) => x,
+            wit::Event::TxUndo(x) => x,
+            _ => return Err(Error::EventMismatch("tx|tx-undo".to_owned())),
+        };
+
+        let block_hash = tx.block.block_hash;
+        let block_height = tx.block.block_height;
+        let hash = tx.hash;
+        let tx = Message::decode(tx.body.as_slice()).map_err(|_| Self::Error::BadUtxo)?;
+
+        Ok(Self {
+            block_hash,
+            block_height,
+            hash,
+            tx,
+        })
+    }
+}
+
 pub struct NewTx(pub Box<dyn crate::txbuilder::TxExpr>);
 
 impl TryInto<wit::Response> for NewTx {
@@ -291,6 +330,31 @@ impl TryInto<wit::Response> for NewTx {
         let tx = crate::txbuilder::build(self.0, ledger)?;
         let cbor = pallas_codec::minicbor::to_vec(&tx).unwrap();
         Ok(wit::Response::PartialTx(cbor))
+    }
+}
+
+pub struct UtxoMatcher {
+    address: Option<Vec<u8>>,
+}
+
+impl UtxoMatcher {
+    pub fn all() -> Self {
+        Self { address: None }
+    }
+
+    pub fn by_address(address: Vec<u8>) -> Self {
+        Self {
+            address: Some(address),
+        }
+    }
+}
+
+impl From<UtxoMatcher> for wit::balius::app::driver::UtxoPattern {
+    fn from(value: UtxoMatcher) -> Self {
+        Self {
+            address: value.address,
+            token: None,
+        }
     }
 }
 
@@ -317,14 +381,30 @@ impl crate::_internal::Worker {
 
     pub fn with_utxo_handler(
         mut self,
-        pattern: wit::balius::app::driver::UtxoPattern,
+        pattern: impl Into<wit::balius::app::driver::UtxoPattern>,
         handler: impl Handler + 'static,
     ) -> Self {
         self.channels.insert(
             self.channels.len() as u32,
             crate::_internal::Channel {
                 handler: Box::new(handler),
-                pattern: wit::balius::app::driver::EventPattern::Utxo(pattern),
+                pattern: wit::balius::app::driver::EventPattern::Utxo(pattern.into()),
+            },
+        );
+
+        self
+    }
+
+    pub fn with_tx_handler(
+        mut self,
+        pattern: impl Into<wit::balius::app::driver::UtxoPattern>,
+        handler: impl Handler + 'static,
+    ) -> Self {
+        self.channels.insert(
+            self.channels.len() as u32,
+            crate::_internal::Channel {
+                handler: Box::new(handler),
+                pattern: wit::balius::app::driver::EventPattern::Tx(pattern.into()),
             },
         );
 
