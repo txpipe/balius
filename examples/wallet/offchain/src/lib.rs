@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use balius_sdk::{Ack, WorkerResult};
+use balius_sdk::{Ack, UtxoMatcher, WorkerResult};
 use balius_sdk::{Config, FnHandler, Utxo, Worker};
 use serde::{Deserialize, Serialize};
 
@@ -50,13 +50,7 @@ fn handle_utxo(_: Config<WalletConfig>, utxo: Utxo<Datum>) -> WorkerResult<Ack> 
 
 #[balius_sdk::main]
 fn main() -> Worker {
-    Worker::new().with_utxo_handler(
-        balius_sdk::wit::balius::app::driver::UtxoPattern {
-            address: None,
-            token: None,
-        },
-        FnHandler::from(handle_utxo),
-    )
+    Worker::new().with_utxo_handler(UtxoMatcher::all(), FnHandler::from(handle_utxo))
 }
 
 // #[cfg(test)]
@@ -82,7 +76,8 @@ fn main() -> Worker {
 //         let cbor = pallas_codec::minicbor::to_vec(&output).unwrap();
 //
 //         let test_utxos: HashMap<_, _> = vec![(
-//             "f7d3837715680f3a170e99cd202b726842d97f82c05af8fcd18053c64e33ec4f#0"
+//
+// "f7d3837715680f3a170e99cd202b726842d97f82c05af8fcd18053c64e33ec4f#0"
 //                 .parse()
 //                 .unwrap(),
 //             cbor,
