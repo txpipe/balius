@@ -106,7 +106,7 @@ async fn run_project_with_config(
         .into_diagnostic()
         .context("setting up ledger")?;
 
-    let mut runtime = Runtime::builder(store)
+    let runtime = Runtime::builder(store)
         .with_ledger(ledger.into())
         .with_kv(balius_runtime::kv::Kv::Mock)
         .build()

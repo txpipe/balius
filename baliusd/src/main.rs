@@ -115,7 +115,7 @@ async fn main() -> miette::Result<()> {
         .into_diagnostic()
         .context("setting up ledger")?;
 
-    let mut runtime = Runtime::builder(store)
+    let runtime = Runtime::builder(store)
         .with_ledger(ledger.into())
         .with_kv((&config).into())
         .with_logger((&config).into())
