@@ -1,3 +1,5 @@
+use kv::KvHost;
+use logging::LoggerHost;
 use router::Router;
 use std::{collections::HashMap, io::Read, path::Path, sync::Arc};
 use thiserror::Error;
@@ -236,8 +238,8 @@ struct WorkerState {
     pub worker_id: String,
     pub router: router::Router,
     pub ledger: Option<ledgers::Ledger>,
-    pub logging: Option<logging::Logger>,
-    pub kv: Option<kv::Kv>,
+    pub logging: Option<logging::LoggerHost>,
+    pub kv: Option<kv::KvHost>,
     pub sign: Option<sign::Signer>,
     pub submit: Option<submit::Submit>,
     pub http: Option<http::Http>,
@@ -408,7 +410,7 @@ impl Runtime {
     }
 
     pub async fn register_worker(
-        &self,
+        &mut self,
         id: &str,
         wasm: &[u8],
         config: serde_json::Value,
@@ -421,8 +423,8 @@ impl Runtime {
                 worker_id: id.to_owned(),
                 router: Router::new(),
                 ledger: self.ledger.clone(),
-                logging: self.logging.clone(),
-                kv: self.kv.clone(),
+                logging: self.logging.as_ref().map(|kv| LoggerHost::new(id, kv)),
+                kv: self.kv.as_ref().map(|kv| KvHost::new(id, kv)),
                 sign: self.sign.clone(),
                 submit: self.submit.clone(),
                 http: self.http.clone(),
@@ -455,7 +457,7 @@ impl Runtime {
     /// Will download bytes from URL and interpret it as WASM. URL support is
     /// determined by build features passed on to the [object_store](https://docs.rs/crate/object_store/latest) crate.
     pub async fn register_worker_from_url(
-        &self,
+        &mut self,
         id: &str,
         url: &url::Url,
         config: serde_json::Value,
@@ -466,7 +468,7 @@ impl Runtime {
     }
 
     pub async fn register_worker_from_file(
-        &self,
+        &mut self,
         id: &str,
         wasm_path: impl AsRef<Path>,
         config: serde_json::Value,
@@ -584,12 +586,11 @@ impl RuntimeBuilder {
     }
 
     pub fn with_kv(mut self, kv: kv::Kv) -> Self {
-        self.kv = Some(kv);
-
         wit::balius::app::kv::add_to_linker(&mut self.linker, |state: &mut WorkerState| {
             state.kv.as_mut().unwrap()
         })
         .unwrap();
+        self.kv = Some(kv);
 
         self
     }

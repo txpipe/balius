@@ -96,7 +96,7 @@ pub async fn serve(
     cancel: CancellationToken,
 ) -> Result<(), Error> {
     let filter = warp::any()
-        .map(move || runtime.clone())
+        .map(move || -> Runtime { runtime.clone() })
         .and(warp::path::param())
         .and(warp::post())
         .and(warp::body::json())

@@ -28,7 +28,7 @@ pub enum KvConfig {
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct FileLoggerConfig {
-    pub path: String,
+    pub folder: Option<PathBuf>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -75,8 +75,8 @@ impl From<&Config> for balius_runtime::logging::Logger {
         match &value.logger {
             Some(LoggerConfig::Silent) => balius_runtime::logging::Logger::Silent,
             Some(LoggerConfig::Tracing) => balius_runtime::logging::Logger::Tracing,
-            Some(LoggerConfig::File(cfg)) => balius_runtime::logging::Logger::Custom(Arc::new(
-                Mutex::new(FileLogger::try_new(&cfg.path).expect("cant open log file")),
+            Some(LoggerConfig::File(cfg)) => balius_runtime::logging::Logger::File(Arc::new(
+                Mutex::new(FileLogger::try_new(cfg.folder.clone()).expect("cant open log folder")),
             )),
             None => balius_runtime::logging::Logger::Silent,
         }
@@ -115,7 +115,7 @@ async fn main() -> miette::Result<()> {
         .into_diagnostic()
         .context("setting up ledger")?;
 
-    let runtime = Runtime::builder(store)
+    let mut runtime = Runtime::builder(store)
         .with_ledger(ledger.into())
         .with_kv((&config).into())
         .with_logger((&config).into())
