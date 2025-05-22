@@ -1,4 +1,4 @@
-use balius_sdk::{Config, FnHandler, Json, Params, WorkerResult};
+use balius_sdk::{Config, FnHandler, Json, Params, Utxo, WorkerResult};
 
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
@@ -108,10 +108,39 @@ fn kvlist(
     }))
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+struct Datum {}
+
+fn handle_utxo(_: Config<MyConfig>, utxo: Utxo<Datum>) -> WorkerResult<()> {
+    balius_sdk::wit::balius::app::logging::log(
+        balius_sdk::wit::balius::app::logging::Level::Info,
+        "handle_utxo",
+        "Adding updating latest utxo in key value",
+    );
+    if let Err(err) = balius_sdk::wit::balius::app::kv::set_value(
+        "latest",
+        format!("{}#{}", hex::encode(utxo.tx_hash), utxo.index).as_bytes(),
+    ) {
+        balius_sdk::wit::balius::app::logging::log(
+            balius_sdk::wit::balius::app::logging::Level::Error,
+            "handle-utxo",
+            &format!("Failed to set latest utxo in kv: {}", err),
+        );
+    };
+    Ok(())
+}
+
 #[balius_sdk::main]
 fn main() -> balius_sdk::Worker {
     balius_sdk::logging::init();
     balius_sdk::Worker::new()
+        .with_utxo_handler(
+            balius_sdk::wit::balius::app::driver::UtxoPattern {
+                address: None,
+                token: None,
+            },
+            FnHandler::from(handle_utxo),
+        )
         .with_request_handler("say-hello", FnHandler::from(say_hello))
         .with_request_handler("log", FnHandler::from(log))
         .with_request_handler("kvget", FnHandler::from(kvget))
