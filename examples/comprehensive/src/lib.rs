@@ -115,7 +115,7 @@ fn handle_utxo(_: Config<MyConfig>, utxo: Utxo<Datum>) -> WorkerResult<()> {
     balius_sdk::wit::balius::app::logging::log(
         balius_sdk::wit::balius::app::logging::Level::Info,
         "handle_utxo",
-        "Adding updating latest utxo in key value",
+        "Updating latest utxo in key value",
     );
     if let Err(err) = balius_sdk::wit::balius::app::kv::set_value(
         "latest",
