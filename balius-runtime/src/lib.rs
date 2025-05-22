@@ -20,11 +20,13 @@ mod store;
 pub mod drivers;
 pub mod http;
 pub mod kv;
+pub mod lease;
 pub mod ledgers;
 pub mod logging;
 pub mod sign;
 pub mod submit;
 
+use lease::LeaseHandler;
 pub use store::Store;
 pub use wit::Response;
 
@@ -455,6 +457,7 @@ pub struct Runtime {
     sign: Option<sign::Signer>,
     submit: Option<submit::Submit>,
     http: Option<http::Http>,
+    lease: Option<lease::Lease>,
 }
 
 impl Runtime {
@@ -569,6 +572,14 @@ impl Runtime {
     ) -> Result<(), Error> {
         info!("applying block");
 
+        let mut should_apply = true;
+        if let Some(lease) = self.lease.as_mut() {
+            if !lease.is_leader().await {
+                info!("runtime doesnt hold lease, skipping block batch.");
+                should_apply = false;
+            }
+        }
+
         let log_seq = self.store.write_ahead(undo_blocks, next_block)?;
 
         let mut workers = self.loaded.lock().await;
@@ -576,7 +587,9 @@ impl Runtime {
         let mut store_update = self.store.start_atomic_update(log_seq)?;
 
         for (_, worker) in workers.iter_mut() {
-            worker.apply_chain(undo_blocks, next_block).await?;
+            if should_apply {
+                worker.apply_chain(undo_blocks, next_block).await?;
+            }
             store_update.update_worker_cursor(&worker.wasm_store.data().worker_id)?;
         }
 
@@ -619,6 +632,7 @@ pub struct RuntimeBuilder {
     sign: Option<sign::Signer>,
     submit: Option<submit::Submit>,
     http: Option<http::Http>,
+    lease: Option<lease::Lease>,
 }
 
 impl RuntimeBuilder {
@@ -641,7 +655,13 @@ impl RuntimeBuilder {
             sign: None,
             submit: None,
             http: None,
+            lease: None,
         }
+    }
+
+    pub fn with_lease(mut self, lease: lease::Lease) -> Self {
+        self.lease = Some(lease);
+        self
     }
 
     pub fn with_ledger(mut self, ledger: ledgers::Ledger) -> Self {
@@ -725,6 +745,7 @@ impl RuntimeBuilder {
             sign,
             submit,
             http,
+            lease,
         } = this;
 
         Ok(Runtime {
@@ -738,6 +759,7 @@ impl RuntimeBuilder {
             sign,
             submit,
             http,
+            lease,
         })
     }
 }
