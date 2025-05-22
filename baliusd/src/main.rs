@@ -1,10 +1,14 @@
 use std::{path::PathBuf, sync::Arc};
 
-use balius_runtime::{drivers, ledgers, logging::file::FileLogger, Runtime, Store};
+use balius_runtime::{
+    drivers, ledgers,
+    logging::{file::FileLogger, postgres::PostgresLogger},
+    Runtime, Store,
+};
 use miette::{Context as _, IntoDiagnostic as _};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use tracing::info;
 
 mod boilerplate;
@@ -20,15 +24,26 @@ pub struct LoggingConfig {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct PostgresKvConfig {
+    connection: String,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
 pub enum KvConfig {
     Memory,
+    Postgres(PostgresKvConfig),
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct FileLoggerConfig {
     pub folder: Option<PathBuf>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct PostgresLoggerConfig {
+    pub connection: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -38,6 +53,7 @@ pub enum LoggerConfig {
     Silent,
     Tracing,
     File(FileLoggerConfig),
+    Postgres(PostgresLoggerConfig),
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -60,24 +76,37 @@ pub struct Config {
     pub logger: Option<LoggerConfig>,
 }
 
-impl From<&Config> for balius_runtime::kv::Kv {
-    fn from(value: &Config) -> Self {
-        match value.kv {
-            Some(KvConfig::Memory) => balius_runtime::kv::Kv::Custom(Arc::new(Mutex::new(
+impl Config {
+    pub async fn kv(&self) -> balius_runtime::kv::Kv {
+        match &self.kv {
+            Some(KvConfig::Memory) => balius_runtime::kv::Kv::Memory(Arc::new(RwLock::new(
                 balius_runtime::kv::memory::MemoryKv::default(),
             ))),
+            Some(KvConfig::Postgres(cfg)) => {
+                balius_runtime::kv::Kv::Postgres(Arc::new(Mutex::new(
+                    balius_runtime::kv::postgres::PostgresKv::try_new(&cfg.connection)
+                        .await
+                        .expect("Failed to connect"),
+                )))
+            }
             None => balius_runtime::kv::Kv::Mock,
         }
     }
-}
-impl From<&Config> for balius_runtime::logging::Logger {
-    fn from(value: &Config) -> Self {
-        match &value.logger {
+
+    pub async fn logger(&self) -> balius_runtime::logging::Logger {
+        match &self.logger {
             Some(LoggerConfig::Silent) => balius_runtime::logging::Logger::Silent,
             Some(LoggerConfig::Tracing) => balius_runtime::logging::Logger::Tracing,
             Some(LoggerConfig::File(cfg)) => balius_runtime::logging::Logger::File(Arc::new(
                 Mutex::new(FileLogger::try_new(cfg.folder.clone()).expect("cant open log folder")),
             )),
+            Some(LoggerConfig::Postgres(cfg)) => {
+                balius_runtime::logging::Logger::Postgres(Arc::new(Mutex::new(
+                    PostgresLogger::try_new(&cfg.connection)
+                        .await
+                        .expect("failed to connect"),
+                )))
+            }
             None => balius_runtime::logging::Logger::Silent,
         }
     }
@@ -117,8 +146,8 @@ async fn main() -> miette::Result<()> {
 
     let runtime = Runtime::builder(store)
         .with_ledger(ledger.into())
-        .with_kv((&config).into())
-        .with_logger((&config).into())
+        .with_kv(config.kv().await)
+        .with_logger(config.logger().await)
         .build()
         .into_diagnostic()
         .context("setting up runtime")?;

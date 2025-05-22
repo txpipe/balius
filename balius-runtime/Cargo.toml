@@ -26,6 +26,7 @@ async-trait = "0.1.83"
 utxorpc = { version = "0.10.0" }
 # utxorpc = { path = "../../../utxorpc/rust-sdk" }
 tokio-util = "0.7.12"
+tokio-postgres = "0.7.13"
 prost = "0.13"
 object_store = { version = "0.12.0", features = ["fs"] }
 url = "2.5.4"
