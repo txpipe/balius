@@ -73,6 +73,7 @@ impl wit::Host for LoggerHost {
                 let mut lock = logger.lock().await;
                 lock.log(&self.worker_id, level, context, message).await
             }
+
             Logger::Custom(logger) => {
                 let mut lock = logger.lock().await;
                 lock.log(&self.worker_id, level, context, message).await

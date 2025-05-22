@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     wit::balius::app::driver::{EventPattern, UtxoPattern},
-    Utxo,
+    Tx, Utxo,
 };
 
 type ChannelId = u32;
@@ -14,11 +14,19 @@ enum MatchKey {
     RequestMethod(Method),
     EveryUtxo,
     UtxoAddress(AddressBytes),
+    EveryTx,
+    TxAddress(AddressBytes),
 }
 
 fn infer_match_keys(pattern: &EventPattern) -> Vec<MatchKey> {
     match pattern {
         EventPattern::Request(x) => vec![MatchKey::RequestMethod(x.to_owned())],
+        EventPattern::Tx(UtxoPattern { address, token }) => match (address, token) {
+            (None, None) => vec![MatchKey::EveryTx],
+            (Some(address), None) => vec![MatchKey::TxAddress(address.to_vec())],
+            _ => todo!(),
+        },
+        EventPattern::TxUndo(_) => todo!(),
         EventPattern::Utxo(UtxoPattern { address, token }) => match (address, token) {
             (None, None) => vec![MatchKey::EveryUtxo],
             (Some(address), None) => vec![MatchKey::UtxoAddress(address.to_vec())],
@@ -52,20 +60,45 @@ impl Router {
         }
     }
 
-    pub fn find_utxo_targets(&self, _utxo: &Utxo) -> Result<HashSet<ChannelId>, super::Error> {
-        let key = MatchKey::EveryUtxo;
+    pub fn find_tx_targets(&self, tx: &Tx) -> HashSet<ChannelId> {
+        let mut targets = HashSet::new();
+        let mut add_targets = |key: &MatchKey| {
+            if let Some(channels) = self.routes.get(key) {
+                targets.extend(channels);
+            }
+        };
 
-        let targets: HashSet<_> = self
-            .routes
-            .get(&key)
-            .iter()
-            .flat_map(|x| x.iter())
-            .cloned()
-            .collect();
+        add_targets(&MatchKey::EveryTx);
+        for input in tx.inputs() {
+            if let Some(address) = input.address() {
+                add_targets(&MatchKey::TxAddress(address));
+            }
+        }
+        for output in tx.outputs() {
+            if let Some(address) = output.address() {
+                add_targets(&MatchKey::TxAddress(address));
+            }
+        }
 
-        // TODO: match by address / policy / asset
+        targets
+    }
 
-        Ok(targets)
+    pub fn find_utxo_targets(&self, utxo: &Utxo) -> HashSet<ChannelId> {
+        let mut targets = HashSet::new();
+        let mut add_targets = |key: &MatchKey| {
+            if let Some(channels) = self.routes.get(key) {
+                targets.extend(channels);
+            }
+        };
+
+        add_targets(&MatchKey::EveryUtxo);
+        if let Some(address) = utxo.address() {
+            add_targets(&MatchKey::UtxoAddress(address));
+        }
+
+        // TODO: match by policy / asset
+
+        targets
     }
 
     pub fn find_request_target(&self, method: &str) -> Result<ChannelId, super::Error> {
