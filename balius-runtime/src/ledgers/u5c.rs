@@ -92,7 +92,7 @@ pub struct Ledger {
 }
 
 impl Ledger {
-    pub async fn new(config: Config) -> Result<Self, crate::Error> {
+    pub async fn new(config: &Config) -> Result<Self, crate::Error> {
         let mut builder = utxorpc::ClientBuilder::new().uri(&config.endpoint_url)?;
         if let Some(headers) = &config.headers {
             for (k, v) in headers.iter() {

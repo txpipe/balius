@@ -10,6 +10,7 @@ members = [
     "examples/wallet/offchain",
     "examples/asteria-admin",
     "examples/telchar",
+    "examples/comprehensive",
     "balius-sdk",
     "balius-runtime",
     "balius-macros",

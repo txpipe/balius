@@ -5,11 +5,14 @@ use tokio::sync::Mutex;
 
 use crate::wit::balius::app::logging as wit;
 
+pub mod file;
+
 #[derive(Clone)]
 pub enum Logger {
     Silent,
     Tracing,
-    Custom(Arc<Mutex<dyn wit::Host + Send + Sync>>),
+    File(Arc<Mutex<file::FileLogger>>),
+    Custom(Arc<Mutex<dyn LoggerProvider + Send + Sync>>),
 }
 
 // need this to set the trace level at runtime
@@ -25,12 +28,30 @@ macro_rules! dyn_event {
     };
 }
 
+pub struct LoggerHost {
+    worker_id: String,
+    provider: Logger,
+}
+impl LoggerHost {
+    pub fn new(worker_id: &str, provider: &Logger) -> Self {
+        Self {
+            worker_id: worker_id.to_string(),
+            provider: provider.clone(),
+        }
+    }
+}
+
 #[async_trait]
-impl wit::Host for Logger {
+pub trait LoggerProvider {
+    async fn log(&mut self, worker_id: &str, level: wit::Level, context: String, message: String);
+}
+
+#[async_trait]
+impl wit::Host for LoggerHost {
     async fn log(&mut self, level: wit::Level, context: String, message: String) {
-        match self {
-            Self::Silent => {}
-            Self::Tracing => {
+        match &mut self.provider {
+            Logger::Silent => {}
+            Logger::Tracing => {
                 let level = match level {
                     wit::Level::Trace => tracing::Level::TRACE,
                     wit::Level::Debug => tracing::Level::DEBUG,
@@ -39,11 +60,15 @@ impl wit::Host for Logger {
                     wit::Level::Error => tracing::Level::ERROR,
                     wit::Level::Critical => tracing::Level::ERROR,
                 };
-                dyn_event!(level, context, message);
+                dyn_event!(level, worker_id = self.worker_id, context, message);
             }
-            Self::Custom(logger) => {
+            Logger::File(logger) => {
                 let mut lock = logger.lock().await;
-                lock.log(level, context, message).await
+                lock.log(&self.worker_id, level, context, message).await
+            }
+            Logger::Custom(logger) => {
+                let mut lock = logger.lock().await;
+                lock.log(&self.worker_id, level, context, message).await
             }
         }
     }

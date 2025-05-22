@@ -43,7 +43,7 @@ async fn faucet_claim() {
 
     let store = Store::open("tests/balius.db", None).unwrap();
 
-    let runtime = Runtime::builder(store)
+    let mut runtime = Runtime::builder(store)
         .with_ledger(ledgers::mock::Ledger.into())
         .build()
         .unwrap();
