@@ -26,6 +26,7 @@ pub struct LoggingConfig {
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct PostgresKvConfig {
     connection: String,
+    max_size: Option<u32>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -44,6 +45,7 @@ pub struct FileLoggerConfig {
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct PostgresLoggerConfig {
     pub connection: String,
+    max_size: Option<u32>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -84,9 +86,12 @@ impl Config {
             ))),
             Some(KvConfig::Postgres(cfg)) => {
                 balius_runtime::kv::Kv::Postgres(Arc::new(Mutex::new(
-                    balius_runtime::kv::postgres::PostgresKv::try_new(&cfg.connection)
-                        .await
-                        .expect("Failed to connect"),
+                    balius_runtime::kv::postgres::PostgresKv::try_new(
+                        &cfg.connection,
+                        cfg.max_size,
+                    )
+                    .await
+                    .expect("Failed to connect"),
                 )))
             }
             None => balius_runtime::kv::Kv::Mock,
@@ -102,7 +107,7 @@ impl Config {
             )),
             Some(LoggerConfig::Postgres(cfg)) => {
                 balius_runtime::logging::Logger::Postgres(Arc::new(Mutex::new(
-                    PostgresLogger::try_new(&cfg.connection)
+                    PostgresLogger::try_new(&cfg.connection, cfg.max_size)
                         .await
                         .expect("failed to connect"),
                 )))

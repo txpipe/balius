@@ -12,33 +12,43 @@
 ///   value BYTEA,                  -- Bytea column for binary data (e.g., images, serialized objects)
 ///   PRIMARY KEY (worker, key)     -- Composite primary key on worker and key
 /// );
-use crate::wit::balius::app::kv as wit;
+use crate::{wit::balius::app::kv as wit, Error};
+use std::str::FromStr;
+use tokio_postgres::NoTls;
 use wit::{KvError, Payload};
+
+use bb8::Pool;
+use bb8_postgres::PostgresConnectionManager;
 
 use super::KvProvider;
 
 pub struct PostgresKv {
-    client: tokio_postgres::Client,
+    pool: Pool<PostgresConnectionManager<NoTls>>,
 }
 
 impl PostgresKv {
-    pub async fn try_new(config: &str) -> Result<Self, tokio_postgres::Error> {
-        let (client, connection) = tokio_postgres::connect(config, tokio_postgres::NoTls).await?;
-        tokio::spawn(async move {
-            if let Err(e) = connection.await {
-                eprintln!("connection error: {}", e);
-            }
-        });
-
-        Ok(Self { client })
+    pub async fn try_new(connection: &str, max_size: Option<u32>) -> Result<Self, Error> {
+        let config = tokio_postgres::config::Config::from_str(connection)
+            .map_err(|err| Error::Config(format!("Failed to parse connection: {}", err)))?;
+        let mgr = PostgresConnectionManager::new(config, tokio_postgres::NoTls);
+        let pool = Pool::builder()
+            .max_size(max_size.unwrap_or(5))
+            .build(mgr)
+            .await
+            .map_err(|err| Error::Config(format!("Failed to connect: {}", err)))?;
+        Ok(Self { pool })
     }
 }
 
 #[async_trait::async_trait]
 impl KvProvider for PostgresKv {
     async fn get_value(&mut self, worker_id: &str, key: String) -> Result<Payload, KvError> {
-        match self
-            .client
+        let conn = self
+            .pool
+            .get()
+            .await
+            .map_err(|err| KvError::Internal(err.to_string()))?;
+        match conn
             .query_opt(
                 "SELECT value FROM kv WHERE worker = $1::TEXT AND key = $2::TEXT",
                 &[&worker_id, &key],
@@ -57,8 +67,12 @@ impl KvProvider for PostgresKv {
         key: String,
         value: Payload,
     ) -> Result<(), KvError> {
-        match self
-            .client
+        let conn = self
+            .pool
+            .get()
+            .await
+            .map_err(|err| KvError::Internal(err.to_string()))?;
+        match conn
             .query(
                 "INSERT INTO kv (worker, key, value)
                  VALUES ($1::TEXT, $2::TEXT, $3::BYTEA)
@@ -78,8 +92,12 @@ impl KvProvider for PostgresKv {
         worker_id: &str,
         prefix: String,
     ) -> Result<Vec<String>, KvError> {
-        match self
-            .client
+        let conn = self
+            .pool
+            .get()
+            .await
+            .map_err(|err| KvError::Internal(err.to_string()))?;
+        match conn
             .query(
                 "SELECT key FROM kv WHERE worker = $1::TEXT AND key LIKE $2::TEXT ORDER BY key",
                 &[&worker_id, &format!("{}%", prefix)],

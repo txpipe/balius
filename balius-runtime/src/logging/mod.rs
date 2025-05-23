@@ -6,6 +6,8 @@ use tokio::sync::Mutex;
 use crate::wit::balius::app::logging as wit;
 
 pub mod file;
+
+#[cfg(feature = "postgres")]
 pub mod postgres;
 
 #[derive(Clone)]
@@ -13,8 +15,10 @@ pub enum Logger {
     Silent,
     Tracing,
     File(Arc<Mutex<file::FileLogger>>),
-    Postgres(Arc<Mutex<postgres::PostgresLogger>>),
     Custom(Arc<Mutex<dyn LoggerProvider + Send + Sync>>),
+
+    #[cfg(feature = "postgres")]
+    Postgres(Arc<Mutex<postgres::PostgresLogger>>),
 }
 
 // need this to set the trace level at runtime
@@ -64,6 +68,7 @@ impl wit::Host for LoggerHost {
                 };
                 dyn_event!(level, worker_id = self.worker_id, context, message);
             }
+            #[cfg(feature = "postgres")]
             Logger::Postgres(logger) => {
                 let mut lock = logger.lock().await;
                 lock.log(&self.worker_id, level, context, message).await
