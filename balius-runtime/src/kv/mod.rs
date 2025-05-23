@@ -5,10 +5,16 @@ use crate::wit::balius::app::kv as wit;
 
 pub use wit::{Host as CustomKv, KvError, Payload};
 
+pub mod memory;
+#[cfg(feature = "postgres")]
+pub mod postgres;
+
 #[derive(Clone)]
 pub enum Kv {
     Mock,
     Memory(Arc<RwLock<memory::MemoryKv>>),
+    #[cfg(feature = "postgres")]
+    Postgres(Arc<Mutex<postgres::PostgresKv>>),
     Custom(Arc<Mutex<dyn KvProvider + Send + Sync>>),
 }
 
@@ -24,8 +30,6 @@ impl KvHost {
         }
     }
 }
-
-pub mod memory;
 
 #[async_trait::async_trait]
 pub trait KvProvider {
@@ -48,6 +52,8 @@ impl wit::Host for KvHost {
     async fn get_value(&mut self, key: String) -> Result<Payload, KvError> {
         match &mut self.provider {
             Kv::Mock => todo!(),
+            #[cfg(feature = "postgres")]
+            Kv::Postgres(kv) => kv.lock().await.get_value(&self.worker_id, key).await,
             Kv::Memory(kv) => {
                 kv.read()
                     .await
@@ -71,6 +77,11 @@ impl wit::Host for KvHost {
                     .set_value(&self.worker_id, key, value)
                     .await
             }
+            #[cfg(feature = "postgres")]
+            Kv::Postgres(kv) => {
+                let mut lock = kv.lock().await;
+                lock.set_value(&self.worker_id, key, value).await
+            }
             Kv::Custom(kv) => {
                 let mut lock = kv.lock().await;
                 lock.set_value(&self.worker_id, key, value).await
@@ -87,6 +98,11 @@ impl wit::Host for KvHost {
                     .clone()
                     .list_values(&self.worker_id, prefix)
                     .await
+            }
+            #[cfg(feature = "postgres")]
+            Kv::Postgres(kv) => {
+                let mut lock = kv.lock().await;
+                lock.list_values(&self.worker_id, prefix).await
             }
             Kv::Custom(kv) => {
                 let mut lock = kv.lock().await;
