@@ -1,6 +1,8 @@
 use std::{path::PathBuf, sync::Arc};
 
-use balius_runtime::{drivers, ledgers, logging::file::FileLogger, Runtime, Store};
+use balius_runtime::{
+    drivers, ledgers, logging::file::FileLogger, store::redb::Store as RedbStore, Runtime, Store,
+};
 use miette::{Context as _, IntoDiagnostic as _};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
@@ -106,9 +108,11 @@ async fn main() -> miette::Result<()> {
 
     boilerplate::setup_tracing(&config.logging).unwrap();
 
-    let store = Store::open("baliusd.db", None)
-        .into_diagnostic()
-        .context("opening store")?;
+    let store = Store::Redb(
+        RedbStore::open("baliusd.db", None)
+            .into_diagnostic()
+            .context("opening store")?,
+    );
 
     let ledger = ledgers::u5c::Ledger::new(&config.ledger)
         .await

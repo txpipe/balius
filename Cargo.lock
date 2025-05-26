@@ -608,6 +608,7 @@ name = "comprehensive"
 version = "0.1.0"
 dependencies = [
  "balius-sdk",
+ "hex",
  "serde",
  "serde_with",
  "tracing",
