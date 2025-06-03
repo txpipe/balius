@@ -73,3 +73,14 @@ impl wit::Host for LoggerHost {
         }
     }
 }
+
+pub fn level_to_string(level: &wit::Level) -> String {
+    match level {
+        wit::Level::Info => "INFO".to_string(),
+        wit::Level::Trace => "TRACE".to_string(),
+        wit::Level::Debug => "DEBUG".to_string(),
+        wit::Level::Error => "ERROR".to_string(),
+        wit::Level::Warn => "WARN".to_string(),
+        wit::Level::Critical => "CRITICAL".to_string(),
+    }
+}

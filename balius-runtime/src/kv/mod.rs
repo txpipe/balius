@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
-use crate::wit::balius::app::kv as wit;
+use crate::{metrics::Metrics, wit::balius::app::kv as wit};
 
 pub use wit::{Host as CustomKv, KvError, Payload};
 
@@ -15,12 +15,14 @@ pub enum Kv {
 pub struct KvHost {
     worker_id: String,
     provider: Kv,
+    metrics: Arc<Metrics>,
 }
 impl KvHost {
-    pub fn new(worker_id: &str, provider: &Kv) -> Self {
+    pub fn new(worker_id: &str, provider: &Kv, metrics: &Arc<Metrics>) -> Self {
         Self {
             worker_id: worker_id.to_string(),
             provider: provider.clone(),
+            metrics: metrics.clone(),
         }
     }
 }
@@ -46,6 +48,7 @@ pub trait KvProvider {
 #[async_trait::async_trait]
 impl wit::Host for KvHost {
     async fn get_value(&mut self, key: String) -> Result<Payload, KvError> {
+        self.metrics.kvget(&self.worker_id);
         match &mut self.provider {
             Kv::Mock => todo!(),
             Kv::Memory(kv) => {
@@ -63,6 +66,7 @@ impl wit::Host for KvHost {
     }
 
     async fn set_value(&mut self, key: String, value: Payload) -> Result<(), KvError> {
+        self.metrics.kvset(&self.worker_id);
         match &mut self.provider {
             Kv::Mock => todo!(),
             Kv::Memory(kv) => {
@@ -79,6 +83,7 @@ impl wit::Host for KvHost {
     }
 
     async fn list_values(&mut self, prefix: String) -> Result<Vec<String>, KvError> {
+        self.metrics.kvlist(&self.worker_id);
         match &mut self.provider {
             Kv::Mock => todo!(),
             Kv::Memory(kv) => {

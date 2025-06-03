@@ -297,6 +297,7 @@ dependencies = [
  "hex",
  "itertools 0.14.0",
  "object_store",
+ "opentelemetry",
  "pallas",
  "prost",
  "redb",
@@ -608,6 +609,7 @@ name = "comprehensive"
 version = "0.1.0"
 dependencies = [
  "balius-sdk",
+ "hex",
  "serde",
  "serde_with",
  "tracing",
@@ -2490,6 +2492,20 @@ dependencies = [
  "libc",
  "pkg-config",
  "vcpkg",
+]
+
+[[package]]
+name = "opentelemetry"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aaf416e4cb72756655126f7dd7bb0af49c674f4c1b9903e80c009e0c37e552e6"
+dependencies = [
+ "futures-core",
+ "futures-sink",
+ "js-sys",
+ "pin-project-lite",
+ "thiserror 2.0.12",
+ "tracing",
 ]
 
 [[package]]
