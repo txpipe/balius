@@ -15,6 +15,7 @@ pub mod wit {
     });
 }
 
+mod metrics;
 mod router;
 
 // implementations
@@ -302,6 +303,7 @@ struct LoadedWorker {
     wasm_store: wasmtime::Store<WorkerState>,
     instance: wit::Worker,
     cursor: Option<LogSeq>,
+    metrics: Arc<metrics::Metrics>,
 }
 
 impl LoadedWorker {
@@ -336,6 +338,7 @@ impl LoadedWorker {
     }
 
     async fn apply_block(&mut self, block: &Block) -> Result<(), Error> {
+        let worker_id = self.wasm_store.data().worker_id.clone();
         let block_hash = block.hash();
         let block_height = block.height();
         for tx in block.txs() {
@@ -351,6 +354,7 @@ impl LoadedWorker {
                     hash: tx_hash.clone(),
                 });
                 for channel in channels {
+                    self.metrics.tx_handled(&worker_id);
                     self.acknowledge_event(channel, &event).await?;
                 }
             }
@@ -374,6 +378,7 @@ impl LoadedWorker {
                 });
 
                 for channel in channels {
+                    self.metrics.utxo_handled(&worker_id);
                     self.acknowledge_event(channel, &event).await?;
                 }
             }
@@ -383,6 +388,7 @@ impl LoadedWorker {
     }
 
     async fn undo_block(&mut self, block: &Block) -> Result<(), Error> {
+        let worker_id = self.wasm_store.data().worker_id.clone();
         let block_hash = block.hash();
         let block_height = block.height();
         for tx in block.txs() {
@@ -406,6 +412,7 @@ impl LoadedWorker {
                 });
 
                 for channel in channels {
+                    self.metrics.undo_utxo_handled(&worker_id);
                     self.acknowledge_event(channel, &event).await?;
                 }
             }
@@ -421,6 +428,7 @@ impl LoadedWorker {
                     hash: tx_hash.clone(),
                 });
                 for channel in channels {
+                    self.metrics.undo_tx_handled(&worker_id);
                     self.acknowledge_event(channel, &event).await?;
                 }
             }
@@ -457,6 +465,8 @@ pub struct Runtime {
     sign: Option<sign::Signer>,
     submit: Option<submit::Submit>,
     http: Option<http::Http>,
+
+    metrics: Arc<metrics::Metrics>,
 }
 
 impl Runtime {
@@ -496,7 +506,10 @@ impl Runtime {
                 router: Router::new(),
                 ledger: self.ledger.clone(),
                 logging: self.logging.as_ref().map(|kv| LoggerHost::new(id, kv)),
-                kv: self.kv.as_ref().map(|kv| KvHost::new(id, kv)),
+                kv: self
+                    .kv
+                    .as_ref()
+                    .map(|kv| KvHost::new(id, kv, &self.metrics)),
                 sign: self.sign.clone(),
                 submit: self.submit.clone(),
                 http: self.http.clone(),
@@ -518,6 +531,7 @@ impl Runtime {
                 wasm_store,
                 instance,
                 cursor,
+                metrics: self.metrics.clone(),
             },
         );
 
@@ -591,15 +605,15 @@ impl Runtime {
 
     pub async fn handle_request(
         &self,
-        worker: &str,
+        worker_id: &str,
         method: &str,
         params: Vec<u8>,
     ) -> Result<wit::Response, Error> {
         let mut lock = self.loaded.lock().await;
 
         let worker = lock
-            .get_mut(worker)
-            .ok_or(Error::WorkerNotFound(worker.to_string()))?;
+            .get_mut(worker_id)
+            .ok_or(Error::WorkerNotFound(worker_id.to_string()))?;
 
         let channel = worker
             .wasm_store
@@ -609,7 +623,9 @@ impl Runtime {
 
         let evt = wit::Event::Request(params);
 
-        worker.dispatch_event(channel, &evt).await
+        let result = worker.dispatch_event(channel, &evt).await;
+        self.metrics.request(worker_id, method, result.is_ok());
+        result
     }
 }
 
@@ -731,6 +747,7 @@ impl RuntimeBuilder {
         } = this;
 
         Ok(Runtime {
+            metrics: Default::default(),
             loaded: Default::default(),
             engine,
             linker,
