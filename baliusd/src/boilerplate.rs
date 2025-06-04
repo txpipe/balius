@@ -1,11 +1,16 @@
+use miette::IntoDiagnostic;
+use opentelemetry::global;
+use opentelemetry_sdk::metrics::SdkMeterProvider;
+use prometheus::{Encoder, Registry};
 use serde::de::DeserializeOwned;
 use std::time::Duration;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 use tracing_subscriber::{filter::Targets, prelude::*};
+use warp::{reply::Reply, Filter};
 
-use crate::LoggingConfig;
+use crate::{LoggingConfig, MetricsConfig};
 
 pub fn setup_tracing(config: &LoggingConfig) -> miette::Result<()> {
     let level = config.max_level;
@@ -109,4 +114,57 @@ where
     s = s.add_source(config::Environment::with_prefix("BALIUSD").separator("_"));
 
     s.build()?.try_deserialize()
+}
+
+pub fn init_meter_provider(registry: Registry) -> miette::Result<()> {
+    let exporter = opentelemetry_prometheus::exporter()
+        .with_registry(registry.clone())
+        .build()
+        .into_diagnostic()?;
+    let provider = SdkMeterProvider::builder().with_reader(exporter).build();
+
+    global::set_meter_provider(provider.clone());
+    Ok(())
+}
+
+async fn metrics_handler(registry: Registry) -> impl Reply {
+    let encoder = prometheus::TextEncoder::new();
+
+    let mut buffer = Vec::new();
+    if let Err(e) = encoder.encode(&registry.gather(), &mut buffer) {
+        eprintln!("could not encode custom metrics: {}", e);
+    };
+    let res = match String::from_utf8(buffer.clone()) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::error!("custom metrics could not be from_utf8'd: {}", e);
+            String::default()
+        }
+    };
+    buffer.clear();
+
+    res
+}
+
+pub async fn metrics_server(
+    config: Option<MetricsConfig>,
+    registry: Registry,
+    cancel: CancellationToken,
+) -> miette::Result<()> {
+    if let Some(config) = config.as_ref() {
+        let route = warp::path!("metrics")
+            .map(move || registry.clone())
+            .then(metrics_handler);
+
+        tokio::select! {
+            _ = warp::serve(route).run(config.listen_address) => {
+
+            }
+            _ = cancel.cancelled() => {
+                tracing::warn!("received cancellation, shutting down metrics server");
+            }
+        }
+    }
+
+    Ok(())
 }
