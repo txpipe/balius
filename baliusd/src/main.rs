@@ -1,7 +1,9 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
 use balius_runtime::{drivers, ledgers, logging::file::FileLogger, Runtime, Store};
+use boilerplate::{init_meter_provider, metrics_server};
 use miette::{Context as _, IntoDiagnostic as _};
+use prometheus::Registry;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use tokio::sync::Mutex;
@@ -50,6 +52,11 @@ pub struct WorkerConfig {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct MetricsConfig {
+    pub listen_address: SocketAddr,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Config {
     pub rpc: drivers::jsonrpc::Config,
     pub ledger: ledgers::u5c::Config,
@@ -58,6 +65,7 @@ pub struct Config {
     pub logging: LoggingConfig,
     pub kv: Option<KvConfig>,
     pub logger: Option<LoggerConfig>,
+    pub metrics: Option<MetricsConfig>,
 }
 
 impl From<&Config> for balius_runtime::kv::Kv {
@@ -104,6 +112,8 @@ async fn main() -> miette::Result<()> {
         .into_diagnostic()
         .context("loading config")?;
 
+    let registry = Registry::new();
+    init_meter_provider(registry.clone())?;
     boilerplate::setup_tracing(&config.logging).unwrap();
 
     let store = Store::open("baliusd.db", None)
@@ -143,16 +153,24 @@ async fn main() -> miette::Result<()> {
         cancel.clone(),
     ));
 
+    let metrics_server = tokio::spawn(metrics_server(
+        config.metrics.clone(),
+        registry.clone(),
+        cancel.clone(),
+    ));
+
     let chainsync_driver = tokio::spawn(drivers::chainsync::run(
         config.chainsync,
         runtime.clone(),
         cancel.clone(),
     ));
 
-    let (jsonrpc, chainsync) = tokio::try_join!(jsonrpc_server, chainsync_driver).unwrap();
+    let (jsonrpc, chainsync, metrics_server) =
+        tokio::try_join!(jsonrpc_server, chainsync_driver, metrics_server).unwrap();
 
     jsonrpc.unwrap();
     chainsync.unwrap();
+    metrics_server.unwrap();
 
     Ok(())
 }

@@ -48,7 +48,7 @@ pub trait KvProvider {
 #[async_trait::async_trait]
 impl wit::Host for KvHost {
     async fn get_value(&mut self, key: String) -> Result<Payload, KvError> {
-        self.metrics.kvget(&self.worker_id);
+        self.metrics.kv_get(&self.worker_id);
         match &mut self.provider {
             Kv::Mock => todo!(),
             Kv::Memory(kv) => {
@@ -66,7 +66,7 @@ impl wit::Host for KvHost {
     }
 
     async fn set_value(&mut self, key: String, value: Payload) -> Result<(), KvError> {
-        self.metrics.kvset(&self.worker_id);
+        self.metrics.kv_set(&self.worker_id);
         match &mut self.provider {
             Kv::Mock => todo!(),
             Kv::Memory(kv) => {
@@ -83,7 +83,7 @@ impl wit::Host for KvHost {
     }
 
     async fn list_values(&mut self, prefix: String) -> Result<Vec<String>, KvError> {
-        self.metrics.kvlist(&self.worker_id);
+        self.metrics.kv_list(&self.worker_id);
         match &mut self.provider {
             Kv::Mock => todo!(),
             Kv::Memory(kv) => {

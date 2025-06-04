@@ -5,9 +5,9 @@ use crate::{logging::level_to_string, wit::balius::app::logging::Level};
 #[derive(Clone)]
 pub struct Metrics {
     requests: Counter<u64>,
-    kvget: Counter<u64>,
-    kvset: Counter<u64>,
-    kvlist: Counter<u64>,
+    kv_get: Counter<u64>,
+    kv_set: Counter<u64>,
+    kv_list: Counter<u64>,
     log: Counter<u64>,
     utxo_handled: Counter<u64>,
     tx_handled: Counter<u64>,
@@ -17,25 +17,25 @@ pub struct Metrics {
 
 impl Metrics {
     pub fn new() -> Self {
-        let meter = global::meter("balius");
+        let meter = global::meter("balius-runtime");
 
         let requests = meter
             .u64_counter("requests")
             .with_description("Total number of requests handled.")
             .build();
 
-        let kvget = meter
-            .u64_counter("kvget")
+        let kv_get = meter
+            .u64_counter("kv_get")
             .with_description("Total amount of kv get calls.")
             .build();
 
-        let kvset = meter
-            .u64_counter("kvset")
+        let kv_set = meter
+            .u64_counter("kv_set")
             .with_description("Total amount of kv set calls.")
             .build();
 
-        let kvlist = meter
-            .u64_counter("kvlist")
+        let kv_list = meter
+            .u64_counter("kv_list")
             .with_description("Total amount of kv list calls.")
             .build();
 
@@ -66,9 +66,9 @@ impl Metrics {
 
         Metrics {
             requests,
-            kvget,
-            kvset,
-            kvlist,
+            kv_get,
+            kv_set,
+            kv_list,
             log,
             utxo_handled,
             tx_handled,
@@ -88,18 +88,18 @@ impl Metrics {
         );
     }
 
-    pub fn kvget(&self, worker_id: &str) {
-        self.kvget
+    pub fn kv_get(&self, worker_id: &str) {
+        self.kv_get
             .add(1, &[KeyValue::new("worker", worker_id.to_owned())]);
     }
 
-    pub fn kvset(&self, worker_id: &str) {
-        self.kvset
+    pub fn kv_set(&self, worker_id: &str) {
+        self.kv_set
             .add(1, &[KeyValue::new("worker", worker_id.to_owned())]);
     }
 
-    pub fn kvlist(&self, worker_id: &str) {
-        self.kvlist
+    pub fn kv_list(&self, worker_id: &str) {
+        self.kv_list
             .add(1, &[KeyValue::new("worker", worker_id.to_owned())]);
     }
 
