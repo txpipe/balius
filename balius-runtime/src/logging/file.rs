@@ -8,7 +8,7 @@ use std::{
 
 use crate::wit::balius::app::logging as wit;
 
-use super::LoggerProvider;
+use super::{level_to_string, LoggerProvider};
 
 /// A logger that writes logs to files.
 pub struct FileLogger {
@@ -54,14 +54,7 @@ impl LoggerProvider for FileLogger {
             format!(
                 "{}: {} - {} - {}\n",
                 chrono::Utc::now().to_rfc3339(),
-                match level {
-                    wit::Level::Info => "INFO",
-                    wit::Level::Trace => "TRACE",
-                    wit::Level::Debug => "DEBUG",
-                    wit::Level::Error => "ERROR",
-                    wit::Level::Warn => "WARN",
-                    wit::Level::Critical => "CRITICAL",
-                },
+                level_to_string(&level),
                 context,
                 message
             )
