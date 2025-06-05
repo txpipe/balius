@@ -102,6 +102,7 @@ interface sign {
         unsupported-algorithm(string),
     }
 
+    add-key: func(key-name: string) -> result<_, sign-error>;
     sign-payload: func(key-name: string, algorithm: string, payload: payload) -> result<signature, sign-error>;
     get-public-key: func(key-name: string, algorithm: string) -> result<public-key, sign-error>;
 }
