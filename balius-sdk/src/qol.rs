@@ -260,6 +260,7 @@ impl<T> std::ops::Deref for Json<T> {
 pub struct Utxo<D> {
     pub block_hash: Vec<u8>,
     pub block_height: u64,
+    pub block_slot: u64,
     pub tx_hash: Vec<u8>,
     pub index: u64,
     pub utxo: utxorpc_spec::utxorpc::v1alpha::cardano::TxOutput,
@@ -280,6 +281,7 @@ impl<D> TryFrom<wit::Event> for Utxo<D> {
 
         let block_hash = utxo.block.block_hash;
         let block_height = utxo.block.block_height;
+        let block_slot = utxo.block.block_slot;
         let tx_hash = utxo.ref_.tx_hash;
         let index = utxo.ref_.txo_index as u64;
         let utxo = Message::decode(utxo.body.as_slice()).map_err(|_| Self::Error::BadUtxo)?;
@@ -287,6 +289,7 @@ impl<D> TryFrom<wit::Event> for Utxo<D> {
         Ok(Utxo {
             block_hash,
             block_height,
+            block_slot,
             tx_hash,
             index,
             utxo,
@@ -298,6 +301,7 @@ impl<D> TryFrom<wit::Event> for Utxo<D> {
 pub struct Tx {
     pub block_hash: Vec<u8>,
     pub block_height: u64,
+    pub block_slot: u64,
     pub hash: Vec<u8>,
     pub tx: utxorpc_spec::utxorpc::v1alpha::cardano::Tx,
 }
@@ -316,12 +320,14 @@ impl TryFrom<wit::Event> for Tx {
 
         let block_hash = tx.block.block_hash;
         let block_height = tx.block.block_height;
+        let block_slot = tx.block.block_slot;
         let hash = tx.hash;
         let tx = Message::decode(tx.body.as_slice()).map_err(|_| Self::Error::BadUtxo)?;
 
         Ok(Self {
             block_hash,
             block_height,
+            block_slot,
             hash,
             tx,
         })
