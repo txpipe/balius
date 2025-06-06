@@ -17,6 +17,21 @@ impl From<in_memory::Signer> for Signer {
         Signer::InMemory(signer)
     }
 }
+impl Signer {
+    pub async fn add_key(
+        &mut self,
+        worker_id: &str,
+        key_name: String,
+    ) -> Result<(), wit::SignError> {
+        match self {
+            Signer::InMemory(signer) => signer.add_key(worker_id, key_name).await,
+            Signer::Custom(signer) => {
+                let mut lock = signer.lock().await;
+                lock.add_key(worker_id, key_name).await
+            }
+        }
+    }
+}
 
 pub struct SignerHost {
     worker_id: String,
@@ -51,16 +66,6 @@ pub trait SignerProvider {
 
 #[async_trait::async_trait]
 impl wit::Host for SignerHost {
-    async fn add_key(&mut self, key_name: String) -> Result<(), wit::SignError> {
-        match &mut self.provider {
-            Signer::InMemory(signer) => signer.add_key(&self.worker_id, key_name).await,
-            Signer::Custom(signer) => {
-                let mut lock = signer.lock().await;
-                lock.add_key(&self.worker_id, key_name).await
-            }
-        }
-    }
-
     async fn sign_payload(
         &mut self,
         key_name: String,
