@@ -1,44 +1,71 @@
 use std::collections::HashMap;
 
 use pallas::crypto::key::ed25519;
+use rand::rngs::OsRng;
 
 use crate::wit::balius::app::sign as wit;
 
+use super::SignerProvider;
+
 #[derive(Default, Clone)]
 pub struct Signer {
-    keys: HashMap<String, SignerKey>,
+    map: HashMap<String, HashMap<String, SignerKey>>,
 }
 
 impl Signer {
     pub fn new() -> Self {
         Self::default()
     }
+}
 
-    pub fn add_key(&mut self, name: &str, key: impl Into<SignerKey>) {
-        self.keys.insert(name.to_string(), key.into());
+impl From<HashMap<String, HashMap<String, SignerKey>>> for Signer {
+    fn from(value: HashMap<String, HashMap<String, SignerKey>>) -> Self {
+        Self { map: value }
+    }
+}
+
+#[async_trait::async_trait]
+impl SignerProvider for Signer {
+    async fn add_key(&mut self, worker_id: &str, key_name: String) -> Result<(), wit::SignError> {
+        let keys = self.map.entry(worker_id.to_string()).or_default();
+        let secret_key = ed25519::SecretKey::new(OsRng);
+        let _ = keys.insert(key_name, secret_key.into());
+        Ok(())
     }
 
-    pub fn sign_payload(
-        &self,
-        key_name: &str,
-        algorithm: &str,
+    async fn sign_payload(
+        &mut self,
+        worker_id: &str,
+        key_name: String,
+        algorithm: String,
         payload: wit::Payload,
     ) -> Result<wit::Signature, wit::SignError> {
-        let Some(key) = self.keys.get(key_name) else {
+        let Some(key) = self
+            .map
+            .entry(worker_id.to_string())
+            .or_default()
+            .get(&key_name)
+        else {
             return Err(wit::SignError::KeyNotFound(key_name.to_string()));
         };
-        key.sign_payload(algorithm, payload)
+        key.sign_payload(&algorithm, payload)
     }
 
-    pub fn get_public_key(
-        &self,
-        key_name: &str,
-        algorithm: &str,
+    async fn get_public_key(
+        &mut self,
+        worker_id: &str,
+        key_name: String,
+        algorithm: String,
     ) -> Result<wit::PublicKey, wit::SignError> {
-        let Some(key) = self.keys.get(key_name) else {
+        let Some(key) = self
+            .map
+            .entry(worker_id.to_string())
+            .or_default()
+            .get(&key_name)
+        else {
             return Err(wit::SignError::KeyNotFound(key_name.to_string()));
         };
-        key.get_public_key(algorithm)
+        key.get_public_key(&algorithm)
     }
 }
 

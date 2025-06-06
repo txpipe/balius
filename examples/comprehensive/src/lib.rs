@@ -1,4 +1,4 @@
-use balius_sdk::{Config, FnHandler, Json, Params, Utxo, WorkerResult};
+use balius_sdk::{Config, Error, FnHandler, Json, Params, Utxo, WorkerResult};
 
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
@@ -108,6 +108,53 @@ fn kvlist(
     }))
 }
 
+#[serde_as]
+#[derive(Serialize, Deserialize)]
+struct SignerGetPublicKeyParams {
+    key_name: String,
+}
+
+#[serde_as]
+#[derive(Serialize, Deserialize)]
+struct SignerGetPublicKeyResponse {
+    public_key: String,
+}
+
+fn signer_get_public_key(
+    _: Config<MyConfig>,
+    request: Params<SignerGetPublicKeyParams>,
+) -> WorkerResult<Json<SignerGetPublicKeyResponse>> {
+    let pk = balius_sdk::wit::balius::app::sign::get_public_key(&request.key_name, "ed25519")?;
+    Ok(Json(SignerGetPublicKeyResponse {
+        public_key: hex::encode(&pk),
+    }))
+}
+
+#[serde_as]
+#[derive(Serialize, Deserialize)]
+struct SignerSignPayloadParams {
+    key_name: String,
+    payload: String,
+}
+
+#[serde_as]
+#[derive(Serialize, Deserialize)]
+struct SignerSignPayloadResponse {
+    signature: String,
+}
+
+fn signer_sign_payload(
+    _: Config<MyConfig>,
+    request: Params<SignerSignPayloadParams>,
+) -> WorkerResult<Json<SignerSignPayloadResponse>> {
+    let payload = hex::decode(&request.payload).map_err(|_| Error::BadParams)?;
+    let signature =
+        balius_sdk::wit::balius::app::sign::sign_payload(&request.key_name, "ed25519", &payload)?;
+    Ok(Json(SignerSignPayloadResponse {
+        signature: hex::encode(&signature),
+    }))
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 struct Datum {}
 
@@ -146,4 +193,11 @@ fn main() -> balius_sdk::Worker {
         .with_request_handler("kvget", FnHandler::from(kvget))
         .with_request_handler("kvset", FnHandler::from(kvset))
         .with_request_handler("kvlist", FnHandler::from(kvlist))
+        .with_request_handler(
+            "signer-get-public-key",
+            FnHandler::from(signer_get_public_key),
+        )
+        .with_request_handler("signer-sign-payload", FnHandler::from(signer_sign_payload))
+        .with_signer("alice")
+        .with_signer("bob")
 }

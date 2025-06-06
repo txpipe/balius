@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{BTreeSet, HashMap},
     sync::{LazyLock, RwLock},
 };
 
@@ -26,6 +26,7 @@ type ChannelRegistry = HashMap<ChannelId, Channel>;
 pub struct Worker {
     pub(crate) channels: ChannelRegistry,
     pub(crate) config: Option<wit::Config>,
+    pub(crate) signers: BTreeSet<String>,
 }
 
 static WORKER: LazyLock<RwLock<Worker>> = LazyLock::new(|| RwLock::new(Worker::default()));
@@ -35,6 +36,10 @@ pub fn global_init_worker(env: wit::Config, mut worker: Worker) {
 
     for (id, handler) in worker.channels.iter() {
         wit::balius::app::driver::register_channel(*id, &handler.pattern);
+    }
+
+    for name in worker.signers.iter() {
+        wit::balius::app::driver::register_signer(name);
     }
 
     let mut singelton = WORKER.write().unwrap();

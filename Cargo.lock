@@ -300,6 +300,7 @@ dependencies = [
  "opentelemetry",
  "pallas",
  "prost",
+ "rand 0.8.5",
  "redb",
  "reqwest",
  "serde",

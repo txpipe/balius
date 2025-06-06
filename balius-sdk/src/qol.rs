@@ -375,6 +375,11 @@ impl crate::_internal::Worker {
         self.config = Some(config);
     }
 
+    pub fn with_signer(mut self, key: &str) -> Self {
+        self.signers.insert(key.to_string());
+        self
+    }
+
     pub fn with_request_handler(mut self, method: &str, handler: impl Handler + 'static) -> Self {
         self.channels.insert(
             self.channels.len() as u32,

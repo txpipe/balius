@@ -1,7 +1,13 @@
 use kv::KvHost;
 use logging::LoggerHost;
 use router::Router;
-use std::{collections::HashMap, io::Read, path::Path, sync::Arc};
+use sign::SignerHost;
+use std::{
+    collections::{BTreeSet, HashMap},
+    io::Read,
+    path::Path,
+    sync::Arc,
+};
 use thiserror::Error;
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
@@ -283,7 +289,8 @@ struct WorkerState {
     pub ledger: Option<ledgers::Ledger>,
     pub logging: Option<logging::LoggerHost>,
     pub kv: Option<kv::KvHost>,
-    pub sign: Option<sign::Signer>,
+    pub sign: Option<sign::SignerHost>,
+    pub signers: BTreeSet<String>,
     pub submit: Option<submit::Submit>,
     pub http: Option<http::Http>,
 }
@@ -296,6 +303,10 @@ impl wit::balius::app::driver::Host for WorkerState {
         pattern: wit::balius::app::driver::EventPattern,
     ) -> () {
         self.router.register_channel(id, &pattern);
+    }
+
+    async fn register_signer(&mut self, name: String) -> () {
+        self.signers.insert(name);
     }
 }
 
@@ -492,7 +503,7 @@ impl Runtime {
     }
 
     pub async fn register_worker(
-        &self,
+        &mut self,
         id: &str,
         wasm: &[u8],
         config: serde_json::Value,
@@ -510,9 +521,10 @@ impl Runtime {
                     .kv
                     .as_ref()
                     .map(|kv| KvHost::new(id, kv, &self.metrics)),
-                sign: self.sign.clone(),
+                sign: self.sign.as_ref().map(|s| SignerHost::new(id, s)),
                 submit: self.submit.clone(),
                 http: self.http.clone(),
+                signers: Default::default(),
             },
         );
 
@@ -521,6 +533,14 @@ impl Runtime {
 
         let config = serde_json::to_vec(&config).unwrap();
         instance.call_init(&mut wasm_store, &config).await?;
+
+        if let Some(signer) = self.sign.as_mut() {
+            for name in &wasm_store.data().signers {
+                signer.add_key(id, name.clone()).await.map_err(|err| {
+                    Error::Driver(format!("failed to create key for worker: {}", err))
+                })?
+            }
+        }
 
         let cursor = self.store.get_worker_cursor(id)?;
         debug!(cursor, id, "found cursor for worker");
@@ -543,7 +563,7 @@ impl Runtime {
     /// Will download bytes from URL and interpret it as WASM. URL support is
     /// determined by build features passed on to the [object_store](https://docs.rs/crate/object_store/latest) crate.
     pub async fn register_worker_from_url(
-        &self,
+        &mut self,
         id: &str,
         url: &url::Url,
         config: serde_json::Value,
@@ -554,7 +574,7 @@ impl Runtime {
     }
 
     pub async fn register_worker_from_file(
-        &self,
+        &mut self,
         id: &str,
         wasm_path: impl AsRef<Path>,
         config: serde_json::Value,
