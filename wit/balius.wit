@@ -298,6 +298,7 @@ interface driver {
     record block-ref {
         block-hash: list<u8>,
         block-height: u64,
+        block-slot: u64,
     }
 
     record utxo {
