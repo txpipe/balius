@@ -359,6 +359,7 @@ interface driver {
     }
 
     register-channel: func(id: u32, pattern: event-pattern);
+    register-signer: func(name: string);
 }
 
 world worker {

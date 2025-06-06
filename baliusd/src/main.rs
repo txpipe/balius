@@ -57,6 +57,13 @@ pub struct MetricsConfig {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(tag = "type")]
+#[serde(rename_all = "lowercase")]
+pub enum SignerConfig {
+    Memory,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Config {
     pub rpc: drivers::jsonrpc::Config,
     pub ledger: ledgers::u5c::Config,
@@ -66,6 +73,7 @@ pub struct Config {
     pub kv: Option<KvConfig>,
     pub logger: Option<LoggerConfig>,
     pub metrics: Option<MetricsConfig>,
+    pub sign: Option<SignerConfig>,
 }
 
 impl From<&Config> for balius_runtime::kv::Kv {
@@ -88,6 +96,12 @@ impl From<&Config> for balius_runtime::logging::Logger {
             )),
             None => balius_runtime::logging::Logger::Silent,
         }
+    }
+}
+impl From<&Config> for balius_runtime::sign::Signer {
+    fn from(_value: &Config) -> Self {
+        // Only one option for now
+        balius_runtime::sign::Signer::InMemory(balius_runtime::sign::in_memory::Signer::default())
     }
 }
 
@@ -129,6 +143,7 @@ async fn main() -> miette::Result<()> {
         .with_ledger(ledger.into())
         .with_kv((&config).into())
         .with_logger((&config).into())
+        .with_signer((&config).into())
         .build()
         .into_diagnostic()
         .context("setting up runtime")?;

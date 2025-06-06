@@ -7,6 +7,7 @@ use thiserror::Error;
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 use utxorpc::spec::sync::BlockRef;
+use wit::balius::app::sign::Host;
 
 pub mod wit {
     wasmtime::component::bindgen!({
@@ -297,6 +298,14 @@ impl wit::balius::app::driver::Host for WorkerState {
         pattern: wit::balius::app::driver::EventPattern,
     ) -> () {
         self.router.register_channel(id, &pattern);
+    }
+
+    async fn register_signer(&mut self, name: String) -> () {
+        if let Some(signer) = self.sign.as_mut() {
+            if let Err(err) = signer.add_key(name.clone()).await {
+                tracing::error!(name = name, err = err.to_string(), "failed to add signer");
+            };
+        }
     }
 }
 
