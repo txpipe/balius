@@ -2,12 +2,7 @@ use kv::KvHost;
 use logging::LoggerHost;
 use router::Router;
 use sign::SignerHost;
-use std::{
-    collections::{BTreeSet, HashMap},
-    io::Read,
-    path::Path,
-    sync::Arc,
-};
+use std::{collections::HashMap, io::Read, path::Path, sync::Arc};
 use thiserror::Error;
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
@@ -290,7 +285,6 @@ struct WorkerState {
     pub logging: Option<logging::LoggerHost>,
     pub kv: Option<kv::KvHost>,
     pub sign: Option<sign::SignerHost>,
-    pub signers: BTreeSet<String>,
     pub submit: Option<submit::Submit>,
     pub http: Option<http::Http>,
 }
@@ -305,8 +299,9 @@ impl wit::balius::app::driver::Host for WorkerState {
         self.router.register_channel(id, &pattern);
     }
 
-    async fn register_signer(&mut self, name: String) -> () {
-        self.signers.insert(name);
+    async fn register_signer(&mut self, name: String, algorithm: String) -> Vec<u8> {
+        let signer = self.sign.as_mut().expect("No sign interface defined.");
+        signer.add_key(name, algorithm).await
     }
 }
 
@@ -524,7 +519,6 @@ impl Runtime {
                 sign: self.sign.as_ref().map(|s| SignerHost::new(id, s)),
                 submit: self.submit.clone(),
                 http: self.http.clone(),
-                signers: Default::default(),
             },
         );
 
@@ -533,14 +527,6 @@ impl Runtime {
 
         let config = serde_json::to_vec(&config).unwrap();
         instance.call_init(&mut wasm_store, &config).await?;
-
-        if let Some(signer) = self.sign.as_mut() {
-            for name in &wasm_store.data().signers {
-                signer.add_key(id, name.clone()).await.map_err(|err| {
-                    Error::Driver(format!("failed to create key for worker: {}", err))
-                })?
-            }
-        }
 
         let cursor = self.store.get_worker_cursor(id)?;
         debug!(cursor, id, "found cursor for worker");

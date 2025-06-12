@@ -17,21 +17,6 @@ impl From<in_memory::Signer> for Signer {
         Signer::InMemory(signer)
     }
 }
-impl Signer {
-    pub async fn add_key(
-        &mut self,
-        worker_id: &str,
-        key_name: String,
-    ) -> Result<(), wit::SignError> {
-        match self {
-            Signer::InMemory(signer) => signer.add_key(worker_id, key_name).await,
-            Signer::Custom(signer) => {
-                let mut lock = signer.lock().await;
-                lock.add_key(worker_id, key_name).await
-            }
-        }
-    }
-}
 
 pub struct SignerHost {
     worker_id: String,
@@ -44,24 +29,27 @@ impl SignerHost {
             provider: provider.clone(),
         }
     }
+
+    pub async fn add_key(&mut self, key_name: String, algorithm: String) -> Vec<u8> {
+        match &mut self.provider {
+            Signer::InMemory(signer) => signer.add_key(&self.worker_id, key_name, algorithm).await,
+            Signer::Custom(signer) => {
+                let mut lock = signer.lock().await;
+                lock.add_key(&self.worker_id, key_name, algorithm).await
+            }
+        }
+    }
 }
 
 #[async_trait::async_trait]
 pub trait SignerProvider {
-    async fn add_key(&mut self, worker_id: &str, key_name: String) -> Result<(), wit::SignError>;
+    async fn add_key(&mut self, worker_id: &str, key_name: String, algorithm: String) -> Vec<u8>;
     async fn sign_payload(
         &mut self,
         worker_id: &str,
         key_name: String,
-        algorithm: String,
         payload: wit::Payload,
     ) -> Result<wit::Signature, wit::SignError>;
-    async fn get_public_key(
-        &mut self,
-        worker_id: &str,
-        key_name: String,
-        algorithm: String,
-    ) -> Result<wit::PublicKey, wit::SignError>;
 }
 
 #[async_trait::async_trait]
@@ -69,38 +57,17 @@ impl wit::Host for SignerHost {
     async fn sign_payload(
         &mut self,
         key_name: String,
-        algorithm: String,
         payload: wit::Payload,
     ) -> Result<wit::Signature, wit::SignError> {
         match &mut self.provider {
             Signer::InMemory(signer) => {
                 signer
-                    .sign_payload(&self.worker_id, key_name, algorithm, payload)
+                    .sign_payload(&self.worker_id, key_name, payload)
                     .await
             }
             Signer::Custom(signer) => {
                 let mut lock = signer.lock().await;
-                lock.sign_payload(&self.worker_id, key_name, algorithm, payload)
-                    .await
-            }
-        }
-    }
-
-    async fn get_public_key(
-        &mut self,
-        key_name: String,
-        algorithm: String,
-    ) -> Result<wit::PublicKey, wit::SignError> {
-        match &mut self.provider {
-            Signer::InMemory(signer) => {
-                signer
-                    .get_public_key(&self.worker_id, key_name, algorithm)
-                    .await
-            }
-            Signer::Custom(signer) => {
-                let mut lock = signer.lock().await;
-                lock.get_public_key(&self.worker_id, key_name, algorithm)
-                    .await
+                lock.sign_payload(&self.worker_id, key_name, payload).await
             }
         }
     }

@@ -123,11 +123,14 @@ struct SignerGetPublicKeyResponse {
 fn signer_get_public_key(
     _: Config<MyConfig>,
     request: Params<SignerGetPublicKeyParams>,
-) -> WorkerResult<Json<SignerGetPublicKeyResponse>> {
-    let pk = balius_sdk::wit::balius::app::sign::get_public_key(&request.key_name, "ed25519")?;
-    Ok(Json(SignerGetPublicKeyResponse {
-        public_key: hex::encode(&pk),
-    }))
+) -> WorkerResult<Json<Option<SignerGetPublicKeyResponse>>> {
+    Ok(Json(
+        balius_sdk::get_public_keys()
+            .get(&request.key_name)
+            .map(|pk| SignerGetPublicKeyResponse {
+                public_key: hex::encode(pk),
+            }),
+    ))
 }
 
 #[serde_as]
@@ -148,8 +151,7 @@ fn signer_sign_payload(
     request: Params<SignerSignPayloadParams>,
 ) -> WorkerResult<Json<SignerSignPayloadResponse>> {
     let payload = hex::decode(&request.payload).map_err(|_| Error::BadParams)?;
-    let signature =
-        balius_sdk::wit::balius::app::sign::sign_payload(&request.key_name, "ed25519", &payload)?;
+    let signature = balius_sdk::wit::balius::app::sign::sign_payload(&request.key_name, &payload)?;
     Ok(Json(SignerSignPayloadResponse {
         signature: hex::encode(&signature),
     }))
@@ -198,6 +200,6 @@ fn main() -> balius_sdk::Worker {
             FnHandler::from(signer_get_public_key),
         )
         .with_request_handler("signer-sign-payload", FnHandler::from(signer_sign_payload))
-        .with_signer("alice")
-        .with_signer("bob")
+        .with_signer("alice", "ed25519")
+        .with_signer("bob", "ed25519")
 }
