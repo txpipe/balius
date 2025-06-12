@@ -288,11 +288,6 @@ interface driver {
     type params = json;
     type public-key = list<u8>;
 
-    variant driver-error {
-        internal(string),
-        unsupported-algorithm(string),
-    }
-
     record txo-ref {
         tx-hash: list<u8>,
         txo-index: u32,

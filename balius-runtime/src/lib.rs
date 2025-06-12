@@ -498,7 +498,7 @@ impl Runtime {
     }
 
     pub async fn register_worker(
-        &mut self,
+        &self,
         id: &str,
         wasm: &[u8],
         config: serde_json::Value,
@@ -549,7 +549,7 @@ impl Runtime {
     /// Will download bytes from URL and interpret it as WASM. URL support is
     /// determined by build features passed on to the [object_store](https://docs.rs/crate/object_store/latest) crate.
     pub async fn register_worker_from_url(
-        &mut self,
+        &self,
         id: &str,
         url: &url::Url,
         config: serde_json::Value,
@@ -560,7 +560,7 @@ impl Runtime {
     }
 
     pub async fn register_worker_from_file(
-        &mut self,
+        &self,
         id: &str,
         wasm_path: impl AsRef<Path>,
         config: serde_json::Value,
