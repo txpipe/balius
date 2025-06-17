@@ -11,6 +11,11 @@ use tracing::info;
 
 mod boilerplate;
 
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct StoreConfig {
+    pub path: PathBuf,
+}
+
 #[serde_as]
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LoggingConfig {
@@ -74,6 +79,7 @@ pub struct Config {
     pub logger: Option<LoggerConfig>,
     pub metrics: Option<MetricsConfig>,
     pub sign: Option<SignerConfig>,
+    pub store: Option<StoreConfig>,
 }
 
 impl From<&Config> for balius_runtime::kv::Kv {
@@ -130,9 +136,14 @@ async fn main() -> miette::Result<()> {
     init_meter_provider(registry.clone())?;
     boilerplate::setup_tracing(&config.logging).unwrap();
 
-    let store = Store::open("baliusd.db", None)
-        .into_diagnostic()
-        .context("opening store")?;
+    let store = match config.store.as_ref() {
+        Some(cfg) => Store::open(cfg.path.clone(), None)
+            .into_diagnostic()
+            .context("opening store")?,
+        None => Store::in_memory()
+            .into_diagnostic()
+            .context("opening in memory store")?,
+    };
 
     let ledger = ledgers::u5c::Ledger::new(&config.ledger)
         .await

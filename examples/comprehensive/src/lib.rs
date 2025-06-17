@@ -166,6 +166,7 @@ fn handle_utxo(_: Config<MyConfig>, utxo: Utxo<Datum>) -> WorkerResult<()> {
         "handle_utxo",
         "Updating latest utxo in key value",
     );
+
     if let Err(err) = balius_sdk::wit::balius::app::kv::set_value(
         "latest",
         format!("{}#{}", hex::encode(utxo.tx_hash), utxo.index).as_bytes(),

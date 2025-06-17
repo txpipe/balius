@@ -243,6 +243,11 @@ impl Block {
             Self::Cardano(block) => block.header.as_ref().unwrap().height,
         }
     }
+    pub fn slot(&self) -> u64 {
+        match self {
+            Self::Cardano(block) => block.header.as_ref().unwrap().slot,
+        }
+    }
     pub fn txs(&self) -> Vec<Tx> {
         match self {
             Self::Cardano(block) => block
@@ -347,6 +352,7 @@ impl LoadedWorker {
         let worker_id = self.wasm_store.data().worker_id.clone();
         let block_hash = block.hash();
         let block_height = block.height();
+        let block_slot = block.slot();
         for tx in block.txs() {
             let tx_hash = tx.hash();
             let channels = self.wasm_store.data().router.find_tx_targets(&tx);
@@ -355,6 +361,7 @@ impl LoadedWorker {
                     block: wit::balius::app::driver::BlockRef {
                         block_hash: block_hash.clone(),
                         block_height,
+                        block_slot,
                     },
                     body: tx.to_bytes(),
                     hash: tx_hash.clone(),
@@ -375,6 +382,7 @@ impl LoadedWorker {
                     block: wit::balius::app::driver::BlockRef {
                         block_hash: block_hash.clone(),
                         block_height,
+                        block_slot,
                     },
                     body: utxo.to_bytes(),
                     ref_: wit::balius::app::driver::TxoRef {
@@ -397,6 +405,7 @@ impl LoadedWorker {
         let worker_id = self.wasm_store.data().worker_id.clone();
         let block_hash = block.hash();
         let block_height = block.height();
+        let block_slot = block.slot();
         for tx in block.txs() {
             let tx_hash = tx.hash();
             for (index, utxo) in tx.outputs().into_iter().enumerate().rev() {
@@ -409,6 +418,7 @@ impl LoadedWorker {
                     block: wit::balius::app::driver::BlockRef {
                         block_hash: block_hash.clone(),
                         block_height,
+                        block_slot,
                     },
                     body: utxo.to_bytes(),
                     ref_: wit::balius::app::driver::TxoRef {
@@ -429,6 +439,7 @@ impl LoadedWorker {
                     block: wit::balius::app::driver::BlockRef {
                         block_hash: block_hash.clone(),
                         block_height,
+                        block_slot,
                     },
                     body: tx.to_bytes(),
                     hash: tx_hash.clone(),
