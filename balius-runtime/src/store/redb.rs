@@ -94,6 +94,13 @@ pub struct Store {
 }
 
 impl Store {
+    pub fn in_memory() -> Result<Self, super::Error> {
+        let db = Arc::new(
+            redb::Database::builder().create_with_backend(redb::backends::InMemoryBackend::new())?,
+        );
+        Ok(Self { db, log_seq: 0 })
+    }
+
     pub fn open(path: impl AsRef<Path>, cache_size: Option<usize>) -> Result<Self, super::Error> {
         let inner = redb::Database::builder()
             .set_repair_callback(|x| {
