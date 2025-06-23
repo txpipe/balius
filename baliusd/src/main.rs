@@ -125,10 +125,10 @@ async fn main() -> miette::Result<()> {
     boilerplate::setup_tracing(&config.logging).unwrap();
 
     let store = match config.store.as_ref() {
-        Some(cfg) => Store::open(cfg.path.clone(), None)
+        Some(cfg) => RedbStore::open(cfg.path.clone(), None)
             .into_diagnostic()
             .context("opening store")?,
-        None => Store::in_memory()
+        None => RedbStore::in_memory()
             .into_diagnostic()
             .context("opening in memory store")?,
     };
@@ -138,7 +138,7 @@ async fn main() -> miette::Result<()> {
         .into_diagnostic()
         .context("setting up ledger")?;
 
-    let runtime = Runtime::builder(store)
+    let runtime = Runtime::builder(Store::Redb(store))
         .with_ledger(ledger.into())
         .with_kv((&config).into())
         .with_logger((&config).into())
