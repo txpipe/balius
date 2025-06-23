@@ -70,9 +70,10 @@ struct KvGetResponse {
 
 fn kvget(_: Config<MyConfig>, request: Params<KvGetParams>) -> WorkerResult<Json<KvGetResponse>> {
     Ok(Json(KvGetResponse {
-        value: balius_sdk::wit::balius::app::kv::get_value(&request.key)
-            .ok()
-            .map(|x| String::from_utf8(x).unwrap()),
+        value: match balius_sdk::wit::balius::app::kv::get_value(&request.key).ok() {
+            Some(payload) => payload.try_into().ok(),
+            None => None,
+        },
     }))
 }
 
@@ -84,7 +85,7 @@ struct KvSetParams {
 }
 
 fn kvset(_: Config<MyConfig>, request: Params<KvSetParams>) -> WorkerResult<()> {
-    balius_sdk::wit::balius::app::kv::set_value(&request.key, request.value.as_bytes())?;
+    balius_sdk::wit::balius::app::kv::set_value(&request.key, &request.value.clone().into())?;
     Ok(())
 }
 
@@ -120,7 +121,7 @@ fn handle_utxo(_: Config<MyConfig>, utxo: Utxo<Datum>) -> WorkerResult<()> {
 
     if let Err(err) = balius_sdk::wit::balius::app::kv::set_value(
         "latest",
-        format!("{}#{}", hex::encode(utxo.tx_hash), utxo.index).as_bytes(),
+        &format!("{}#{}", hex::encode(utxo.tx_hash), utxo.index).into(),
     ) {
         balius_sdk::wit::balius::app::logging::log(
             balius_sdk::wit::balius::app::logging::Level::Error,

@@ -9,7 +9,7 @@ use super::KvProvider;
 
 #[derive(Default, Clone)]
 pub struct MemoryKv {
-    map: BTreeMap<String, BTreeMap<String, Vec<u8>>>,
+    map: BTreeMap<String, BTreeMap<String, Payload>>,
 }
 
 #[async_trait::async_trait]

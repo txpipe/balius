@@ -425,3 +425,85 @@ impl crate::_internal::Worker {
         self
     }
 }
+
+impl From<i64> for wit::balius::app::kv::Payload {
+    fn from(value: i64) -> Self {
+        wit::balius::app::kv::Payload::Int(value)
+    }
+}
+
+impl From<String> for wit::balius::app::kv::Payload {
+    fn from(value: String) -> Self {
+        wit::balius::app::kv::Payload::Text(value)
+    }
+}
+
+impl From<&str> for wit::balius::app::kv::Payload {
+    fn from(value: &str) -> Self {
+        wit::balius::app::kv::Payload::Text(value.to_owned())
+    }
+}
+
+impl From<Vec<u8>> for wit::balius::app::kv::Payload {
+    fn from(value: Vec<u8>) -> Self {
+        wit::balius::app::kv::Payload::Bytes(value)
+    }
+}
+
+impl From<bool> for wit::balius::app::kv::Payload {
+    fn from(value: bool) -> Self {
+        wit::balius::app::kv::Payload::Boolean(value)
+    }
+}
+
+impl TryInto<String> for wit::balius::app::kv::Payload {
+    type Error = wit::balius::app::kv::KvError;
+    fn try_into(self) -> Result<String, Self::Error> {
+        if let wit::balius::app::kv::Payload::Text(value) = self {
+            Ok(value)
+        } else {
+            Err(wit::balius::app::kv::KvError::Internal(
+                "type error: can't be coerced to string".to_owned(),
+            ))
+        }
+    }
+}
+
+impl TryInto<Vec<u8>> for wit::balius::app::kv::Payload {
+    type Error = wit::balius::app::kv::KvError;
+    fn try_into(self) -> Result<Vec<u8>, Self::Error> {
+        if let wit::balius::app::kv::Payload::Bytes(value) = self {
+            Ok(value)
+        } else {
+            Err(wit::balius::app::kv::KvError::Internal(
+                "type error: can't be coerced to bytes".to_owned(),
+            ))
+        }
+    }
+}
+
+impl TryInto<i64> for wit::balius::app::kv::Payload {
+    type Error = wit::balius::app::kv::KvError;
+    fn try_into(self) -> Result<i64, Self::Error> {
+        if let wit::balius::app::kv::Payload::Int(value) = self {
+            Ok(value)
+        } else {
+            Err(wit::balius::app::kv::KvError::Internal(
+                "type error: can't be coerced to i64".to_owned(),
+            ))
+        }
+    }
+}
+
+impl TryInto<bool> for wit::balius::app::kv::Payload {
+    type Error = wit::balius::app::kv::KvError;
+    fn try_into(self) -> Result<bool, Self::Error> {
+        if let wit::balius::app::kv::Payload::Boolean(value) = self {
+            Ok(value)
+        } else {
+            Err(wit::balius::app::kv::KvError::Internal(
+                "type error: can't be coerced to bool".to_owned(),
+            ))
+        }
+    }
+}

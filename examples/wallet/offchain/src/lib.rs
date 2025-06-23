@@ -31,7 +31,7 @@ where
     fn set(&self, key: &str, value: V) -> Result<(), balius_sdk::Error> {
         let key = format!("{}/{}", self.namespace, key);
         let value = pallas_codec::minicbor::to_vec(&value).unwrap();
-        balius_sdk::wit::balius::app::kv::set_value(&key, &value).unwrap();
+        balius_sdk::wit::balius::app::kv::set_value(&key, &value.into()).unwrap();
         Ok(())
     }
 }

@@ -1,7 +1,12 @@
 package balius:app@0.1.0;
 
 interface kv {
-    type payload = list<u8>;
+    variant payload {
+      text(string),
+      bytes(list<u8>),
+      int(s64),
+      boolean(bool)
+    }
     variant kv-error {
         upstream(string),
         internal(string),
