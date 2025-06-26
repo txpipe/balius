@@ -95,15 +95,12 @@ interface logging {
 interface sign {
     type payload = list<u8>;
     type signature = list<u8>;
-    type public-key = list<u8>;
     variant sign-error {
         internal(string),
         key-not-found(string),
-        unsupported-algorithm(string),
     }
 
-    sign-payload: func(key-name: string, algorithm: string, payload: payload) -> result<signature, sign-error>;
-    get-public-key: func(key-name: string, algorithm: string) -> result<public-key, sign-error>;
+    sign-payload: func(key-name: string, payload: payload) -> result<signature, sign-error>;
 }
 
 interface submit {
@@ -289,6 +286,7 @@ interface driver {
     type json = list<u8>;
     type timestamp = u64;
     type params = json;
+    type public-key = list<u8>;
 
     record txo-ref {
         tx-hash: list<u8>,
@@ -359,6 +357,7 @@ interface driver {
     }
 
     register-channel: func(id: u32, pattern: event-pattern);
+    register-signer: func(name: string, algorithm: string) -> public-key;
 }
 
 world worker {

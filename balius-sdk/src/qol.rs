@@ -5,6 +5,8 @@ use thiserror::Error;
 use crate::_internal::Handler;
 use crate::wit;
 
+pub use crate::_internal::global_get_public_keys as get_public_keys;
+
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("internal error: {0}")]
@@ -379,6 +381,12 @@ impl crate::_internal::Worker {
 
     pub(crate) fn init(&mut self, config: wit::Config) {
         self.config = Some(config);
+    }
+
+    pub fn with_signer(mut self, key: &str, algorithm: &str) -> Self {
+        self.requested_signers
+            .insert(key.to_string(), algorithm.to_string());
+        self
     }
 
     pub fn with_request_handler(mut self, method: &str, handler: impl Handler + 'static) -> Self {

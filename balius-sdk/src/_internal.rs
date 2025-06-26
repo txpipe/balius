@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     sync::{LazyLock, RwLock},
 };
 
@@ -26,6 +26,8 @@ type ChannelRegistry = HashMap<ChannelId, Channel>;
 pub struct Worker {
     pub(crate) channels: ChannelRegistry,
     pub(crate) config: Option<wit::Config>,
+    pub(crate) requested_signers: BTreeMap<String, String>,
+    pub(crate) signers: BTreeMap<String, Vec<u8>>,
 }
 
 static WORKER: LazyLock<RwLock<Worker>> = LazyLock::new(|| RwLock::new(Worker::default()));
@@ -35,6 +37,13 @@ pub fn global_init_worker(env: wit::Config, mut worker: Worker) {
 
     for (id, handler) in worker.channels.iter() {
         wit::balius::app::driver::register_channel(*id, &handler.pattern);
+    }
+
+    for (name, algorithm) in worker.requested_signers.iter() {
+        worker.signers.insert(
+            name.clone(),
+            wit::balius::app::driver::register_signer(name, algorithm),
+        );
     }
 
     let mut singelton = WORKER.write().unwrap();
@@ -60,4 +69,9 @@ pub fn global_handle_request(id: u32, evt: wit::Event) -> Result<wit::Response, 
     };
 
     channel.handler.handle(config, evt)
+}
+
+pub fn global_get_public_keys() -> BTreeMap<String, Vec<u8>> {
+    let worker = WORKER.read().unwrap();
+    worker.signers.clone()
 }
