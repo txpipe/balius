@@ -1,44 +1,57 @@
 use std::collections::HashMap;
 
 use pallas::crypto::key::ed25519;
+use rand::rngs::OsRng;
 
 use crate::wit::balius::app::sign as wit;
 
+use super::SignerProvider;
+
 #[derive(Default, Clone)]
 pub struct Signer {
-    keys: HashMap<String, SignerKey>,
+    map: HashMap<String, HashMap<String, SignerKey>>,
 }
 
 impl Signer {
     pub fn new() -> Self {
         Self::default()
     }
+}
 
-    pub fn add_key(&mut self, name: &str, key: impl Into<SignerKey>) {
-        self.keys.insert(name.to_string(), key.into());
+impl From<HashMap<String, HashMap<String, SignerKey>>> for Signer {
+    fn from(value: HashMap<String, HashMap<String, SignerKey>>) -> Self {
+        Self { map: value }
+    }
+}
+
+#[async_trait::async_trait]
+impl SignerProvider for Signer {
+    async fn add_key(&mut self, worker_id: &str, key_name: String, algorithm: String) -> Vec<u8> {
+        if algorithm != "ed25519" {
+            panic!("Unsupported algorithm")
+        }
+        let keys = self.map.entry(worker_id.to_string()).or_default();
+        let secret_key = ed25519::SecretKey::new(OsRng);
+        let public_key = secret_key.public_key();
+        let _ = keys.insert(key_name, secret_key.into());
+        public_key.as_ref().to_vec()
     }
 
-    pub fn sign_payload(
-        &self,
-        key_name: &str,
-        algorithm: &str,
+    async fn sign_payload(
+        &mut self,
+        worker_id: &str,
+        key_name: String,
         payload: wit::Payload,
     ) -> Result<wit::Signature, wit::SignError> {
-        let Some(key) = self.keys.get(key_name) else {
+        let Some(key) = self
+            .map
+            .entry(worker_id.to_string())
+            .or_default()
+            .get(&key_name)
+        else {
             return Err(wit::SignError::KeyNotFound(key_name.to_string()));
         };
-        key.sign_payload(algorithm, payload)
-    }
-
-    pub fn get_public_key(
-        &self,
-        key_name: &str,
-        algorithm: &str,
-    ) -> Result<wit::PublicKey, wit::SignError> {
-        let Some(key) = self.keys.get(key_name) else {
-            return Err(wit::SignError::KeyNotFound(key_name.to_string()));
-        };
-        key.get_public_key(algorithm)
+        key.sign_payload(payload)
     }
 }
 
@@ -60,21 +73,9 @@ impl From<ed25519::SecretKeyExtended> for SignerKey {
 }
 
 impl SignerKey {
-    fn sign_payload(
-        &self,
-        algorithm: &str,
-        payload: wit::Payload,
-    ) -> Result<wit::Signature, wit::SignError> {
-        match (algorithm, self) {
-            ("ed25519", Self::Ed25519(key)) => Ok(key.sign_payload(payload)),
-            (_, _) => Err(wit::SignError::UnsupportedAlgorithm(algorithm.to_string())),
-        }
-    }
-
-    fn get_public_key(&self, algorithm: &str) -> Result<wit::PublicKey, wit::SignError> {
-        match (algorithm, self) {
-            ("ed25519", Self::Ed25519(key)) => Ok(key.get_public_key()),
-            (_, _) => Err(wit::SignError::UnsupportedAlgorithm(algorithm.to_string())),
+    fn sign_payload(&self, payload: wit::Payload) -> Result<wit::Signature, wit::SignError> {
+        match self {
+            Self::Ed25519(key) => Ok(key.sign_payload(payload)),
         }
     }
 }
@@ -91,12 +92,5 @@ impl Ed25519Key {
             Self::SecretKeyExtended(key) => key.sign(payload),
         };
         signature.as_ref().to_vec()
-    }
-    fn get_public_key(&self) -> wit::PublicKey {
-        let public_key = match self {
-            Self::SecretKey(key) => key.public_key(),
-            Self::SecretKeyExtended(key) => key.public_key(),
-        };
-        public_key.as_ref().to_vec()
     }
 }

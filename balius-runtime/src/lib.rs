@@ -1,6 +1,7 @@
 use kv::KvHost;
 use logging::LoggerHost;
 use router::Router;
+use sign::SignerHost;
 use std::{collections::HashMap, io::Read, path::Path, sync::Arc};
 use thiserror::Error;
 use tokio::sync::Mutex;
@@ -288,7 +289,7 @@ struct WorkerState {
     pub ledger: Option<ledgers::Ledger>,
     pub logging: Option<logging::LoggerHost>,
     pub kv: Option<kv::KvHost>,
-    pub sign: Option<sign::Signer>,
+    pub sign: Option<sign::SignerHost>,
     pub submit: Option<submit::Submit>,
     pub http: Option<http::Http>,
 }
@@ -301,6 +302,11 @@ impl wit::balius::app::driver::Host for WorkerState {
         pattern: wit::balius::app::driver::EventPattern,
     ) -> () {
         self.router.register_channel(id, &pattern);
+    }
+
+    async fn register_signer(&mut self, name: String, algorithm: String) -> Vec<u8> {
+        let signer = self.sign.as_mut().expect("No sign interface defined.");
+        signer.add_key(name, algorithm).await
     }
 }
 
@@ -521,7 +527,7 @@ impl Runtime {
                     .kv
                     .as_ref()
                     .map(|kv| KvHost::new(id, kv, &self.metrics)),
-                sign: self.sign.clone(),
+                sign: self.sign.as_ref().map(|s| SignerHost::new(id, s)),
                 submit: self.submit.clone(),
                 http: self.http.clone(),
             },
