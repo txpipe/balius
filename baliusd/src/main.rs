@@ -1,6 +1,8 @@
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
-use balius_runtime::{drivers, ledgers, logging::file::FileLogger, Runtime, Store};
+use balius_runtime::{
+    drivers, ledgers, logging::file::FileLogger, store::redb::Store as RedbStore, Runtime, Store,
+};
 use boilerplate::{init_meter_provider, metrics_server};
 use miette::{Context as _, IntoDiagnostic as _};
 use prometheus::Registry;
@@ -137,10 +139,10 @@ async fn main() -> miette::Result<()> {
     boilerplate::setup_tracing(&config.logging).unwrap();
 
     let store = match config.store.as_ref() {
-        Some(cfg) => Store::open(cfg.path.clone(), None)
+        Some(cfg) => RedbStore::open(cfg.path.clone(), None)
             .into_diagnostic()
             .context("opening store")?,
-        None => Store::in_memory()
+        None => RedbStore::in_memory()
             .into_diagnostic()
             .context("opening in memory store")?,
     };
@@ -150,7 +152,7 @@ async fn main() -> miette::Result<()> {
         .into_diagnostic()
         .context("setting up ledger")?;
 
-    let runtime = Runtime::builder(store)
+    let runtime = Runtime::builder(Store::Redb(store))
         .with_ledger(ledger.into())
         .with_kv((&config).into())
         .with_logger((&config).into())
