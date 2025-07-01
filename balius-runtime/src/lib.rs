@@ -527,7 +527,10 @@ impl Runtime {
                     .kv
                     .as_ref()
                     .map(|kv| KvHost::new(id, kv, &self.metrics)),
-                sign: self.sign.as_ref().map(|s| SignerHost::new(id, s)),
+                sign: self
+                    .sign
+                    .as_ref()
+                    .map(|s| SignerHost::new(id, s, &self.metrics)),
                 submit: self.submit.clone(),
                 http: self.http.clone(),
             },
