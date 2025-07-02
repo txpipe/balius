@@ -27,6 +27,8 @@ pub enum Error {
     Ledger(wit::balius::app::ledger::LedgerError),
     #[error("sign error: {0}")]
     Sign(wit::balius::app::sign::SignError),
+    #[error("submit error: {0}")]
+    Submit(wit::balius::app::submit::SubmitError),
     #[error("http error: {0}")]
     Http(wit::balius::app::http::ErrorCode),
 }
@@ -74,6 +76,10 @@ impl From<Error> for wit::HandleError {
                 code: 9,
                 message: format!("event mismatch, expected {}", x),
             },
+            Error::Submit(err) => wit::HandleError {
+                code: 10,
+                message: err.to_string(),
+            },
         }
     }
 }
@@ -99,6 +105,12 @@ impl From<wit::balius::app::ledger::LedgerError> for Error {
 impl From<wit::balius::app::sign::SignError> for Error {
     fn from(error: wit::balius::app::sign::SignError) -> Self {
         Error::Sign(error)
+    }
+}
+
+impl From<wit::balius::app::submit::SubmitError> for Error {
+    fn from(error: wit::balius::app::submit::SubmitError) -> Self {
+        Error::Submit(error)
     }
 }
 
