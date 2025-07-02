@@ -13,6 +13,7 @@ pub struct Metrics {
     tx_handled: Counter<u64>,
     undo_utxo_handled: Counter<u64>,
     undo_tx_handled: Counter<u64>,
+    submit_tx: Counter<u64>,
 }
 
 impl Metrics {
@@ -64,6 +65,11 @@ impl Metrics {
             .with_description("Amount of undo Tx event handled per worker.")
             .build();
 
+        let submit_tx = meter
+            .u64_counter("submit_tx")
+            .with_description("Amount of submit_tx calls per worker.")
+            .build();
+
         Metrics {
             requests,
             kv_get,
@@ -74,6 +80,7 @@ impl Metrics {
             tx_handled,
             undo_utxo_handled,
             undo_tx_handled,
+            submit_tx,
         }
     }
 
@@ -130,6 +137,11 @@ impl Metrics {
 
     pub fn undo_tx_handled(&self, worker_id: &str) {
         self.undo_tx_handled
+            .add(1, &[KeyValue::new("worker", worker_id.to_owned())]);
+    }
+
+    pub fn submit_tx(&self, worker_id: &str) {
+        self.submit_tx
             .add(1, &[KeyValue::new("worker", worker_id.to_owned())]);
     }
 }

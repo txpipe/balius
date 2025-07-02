@@ -69,6 +69,13 @@ pub enum SignerConfig {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(tag = "type")]
+#[serde(rename_all = "lowercase")]
+pub enum SubmitConfig {
+    U5c(balius_runtime::submit::u5c::Config),
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Config {
     pub rpc: drivers::jsonrpc::Config,
     pub ledger: ledgers::u5c::Config,
@@ -79,6 +86,7 @@ pub struct Config {
     pub logger: Option<LoggerConfig>,
     pub metrics: Option<MetricsConfig>,
     pub sign: Option<SignerConfig>,
+    pub submit: Option<SubmitConfig>,
     pub store: Option<StoreConfig>,
 }
 
@@ -104,10 +112,24 @@ impl From<&Config> for balius_runtime::logging::Logger {
         }
     }
 }
+
 impl From<&Config> for balius_runtime::sign::Signer {
     fn from(_value: &Config) -> Self {
         // Only one option for now
         balius_runtime::sign::Signer::InMemory(balius_runtime::sign::in_memory::Signer::default())
+    }
+}
+
+impl Config {
+    pub async fn into_submit(&self) -> balius_runtime::submit::Submit {
+        match &self.submit {
+            Some(SubmitConfig::U5c(cfg)) => balius_runtime::submit::Submit::U5C(
+                balius_runtime::submit::u5c::Submit::new(cfg)
+                    .await
+                    .expect("Failed to convert config into submit interface"),
+            ),
+            None => balius_runtime::submit::Submit::Mock,
+        }
     }
 }
 
@@ -155,6 +177,7 @@ async fn main() -> miette::Result<()> {
         .with_kv((&config).into())
         .with_logger((&config).into())
         .with_signer((&config).into())
+        .with_submit(config.into_submit().await)
         .build()
         .into_diagnostic()
         .context("setting up runtime")?;
