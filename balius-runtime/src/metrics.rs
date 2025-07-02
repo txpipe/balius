@@ -13,6 +13,10 @@ pub struct Metrics {
     tx_handled: Counter<u64>,
     undo_utxo_handled: Counter<u64>,
     undo_tx_handled: Counter<u64>,
+    signer_sign_payload: Counter<u64>,
+    ledger_read_utxos: Counter<u64>,
+    ledger_search_utxos: Counter<u64>,
+    ledger_read_params: Counter<u64>,
 }
 
 impl Metrics {
@@ -64,6 +68,26 @@ impl Metrics {
             .with_description("Amount of undo Tx event handled per worker.")
             .build();
 
+        let signer_sign_payload = meter
+            .u64_counter("signer_sign_payload")
+            .with_description("Amount of sign payload handled per worker.")
+            .build();
+
+        let ledger_read_utxos = meter
+            .u64_counter("ledger_read_utxos")
+            .with_description("Amount of calls to read_utxos on the ledger interface.")
+            .build();
+
+        let ledger_search_utxos = meter
+            .u64_counter("ledger_search_utxos")
+            .with_description("Amount of calls to search_utxos on the ledger interface.")
+            .build();
+
+        let ledger_read_params = meter
+            .u64_counter("ledger_read_params")
+            .with_description("Amount of calls to read_params on the ledger interface.")
+            .build();
+
         Metrics {
             requests,
             kv_get,
@@ -74,6 +98,10 @@ impl Metrics {
             tx_handled,
             undo_utxo_handled,
             undo_tx_handled,
+            signer_sign_payload,
+            ledger_read_utxos,
+            ledger_search_utxos,
+            ledger_read_params,
         }
     }
 
@@ -130,6 +158,26 @@ impl Metrics {
 
     pub fn undo_tx_handled(&self, worker_id: &str) {
         self.undo_tx_handled
+            .add(1, &[KeyValue::new("worker", worker_id.to_owned())]);
+    }
+
+    pub fn signer_sign_payload(&self, worker_id: &str) {
+        self.signer_sign_payload
+            .add(1, &[KeyValue::new("worker", worker_id.to_owned())]);
+    }
+
+    pub fn ledger_read_utxos(&self, worker_id: &str) {
+        self.ledger_read_utxos
+            .add(1, &[KeyValue::new("worker", worker_id.to_owned())]);
+    }
+
+    pub fn ledger_search_utxos(&self, worker_id: &str) {
+        self.ledger_search_utxos
+            .add(1, &[KeyValue::new("worker", worker_id.to_owned())]);
+    }
+
+    pub fn ledger_read_params(&self, worker_id: &str) {
+        self.ledger_read_params
             .add(1, &[KeyValue::new("worker", worker_id.to_owned())]);
     }
 }
