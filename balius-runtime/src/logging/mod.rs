@@ -3,7 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::Mutex;
 
-use crate::wit::balius::app::logging as wit;
+use crate::{metrics::Metrics, wit::balius::app::logging as wit};
 
 pub mod file;
 
@@ -31,12 +31,14 @@ macro_rules! dyn_event {
 pub struct LoggerHost {
     worker_id: String,
     provider: Logger,
+    metrics: Arc<Metrics>,
 }
 impl LoggerHost {
-    pub fn new(worker_id: &str, provider: &Logger) -> Self {
+    pub fn new(worker_id: &str, provider: &Logger, metrics: &Arc<Metrics>) -> Self {
         Self {
             worker_id: worker_id.to_string(),
             provider: provider.clone(),
+            metrics: metrics.clone(),
         }
     }
 }
@@ -49,6 +51,7 @@ pub trait LoggerProvider {
 #[async_trait]
 impl wit::Host for LoggerHost {
     async fn log(&mut self, level: wit::Level, context: String, message: String) {
+        self.metrics.log(&self.worker_id, &level);
         match &mut self.provider {
             Logger::Silent => {}
             Logger::Tracing => {
