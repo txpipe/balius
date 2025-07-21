@@ -12,7 +12,7 @@ fn sanitize_string(name: &str) -> String {
         .chars()
         .map(|c| match c {
             ' ' | '.' => '-',
-            c => c
+            c => c,
         })
         .collect::<String>();
 
@@ -46,13 +46,13 @@ fn create_project(project_name: &str) -> std::io::Result<()> {
         if project_path.is_file() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::AlreadyExists,
-                format!("A file named '{}' already exists", project_name)
+                format!("A file named '{project_name}' already exists"),
             ));
         }
 
         return Err(std::io::Error::new(
             std::io::ErrorKind::AlreadyExists,
-            format!("Directory '{}' already exists", project_name)
+            format!("Directory '{project_name}' already exists"),
         ));
     }
 
@@ -69,7 +69,7 @@ fn create_project(project_name: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-pub fn execute(args: Vec<String>) {    
+pub fn execute(args: Vec<String>) {
     // Process input name from command line arguments
     let input_name = if args.is_empty() {
         eprintln!("Error: Project name is required");
@@ -83,16 +83,16 @@ pub fn execute(args: Vec<String>) {
     println!("Initializing Balius project...");
 
     let project_name = sanitize_string(&input_name);
-    
+
     // If the sanitized name is different from input, show what it was converted to
     if project_name != input_name {
-        println!("Package name will be: {}", project_name);
+        println!("Package name will be: {project_name}");
     }
 
     println!("Preparing project...");
-    
+
     match create_project(&project_name) {
-        Ok(_) => println!("Project generated successfully at ./{}", project_name),
-        Err(e) => eprintln!("Error generating project: {}", e),
+        Ok(_) => println!("Project generated successfully at ./{project_name}"),
+        Err(e) => eprintln!("Error generating project: {e}"),
     }
 }

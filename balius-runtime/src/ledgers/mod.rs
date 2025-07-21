@@ -9,12 +9,27 @@ pub mod u5c;
 
 pub use wit::{Host as CustomLedger, LedgerError, TxoRef, Utxo, UtxoPage, UtxoPattern};
 
+#[async_trait::async_trait]
+pub trait LedgerProvider {
+    async fn read_utxos(
+        &mut self,
+        refs: Vec<wit::TxoRef>,
+    ) -> Result<Vec<wit::Utxo>, wit::LedgerError>;
+    async fn search_utxos(
+        &mut self,
+        pattern: wit::UtxoPattern,
+        start: Option<String>,
+        max_items: u32,
+    ) -> Result<wit::UtxoPage, wit::LedgerError>;
+    async fn read_params(&mut self) -> Result<wit::Json, wit::LedgerError>;
+}
+
 #[derive(Clone)]
 #[allow(clippy::large_enum_variant)]
 pub enum Ledger {
     Mock(mock::Ledger),
     U5C(u5c::Ledger),
-    Custom(Arc<Mutex<dyn wit::Host + Send + Sync>>),
+    Custom(Arc<Mutex<dyn LedgerProvider + Send + Sync>>),
 }
 
 impl From<mock::Ledger> for Ledger {
@@ -29,7 +44,6 @@ impl From<u5c::Ledger> for Ledger {
     }
 }
 
-#[async_trait::async_trait]
 impl wit::Host for Ledger {
     async fn read_utxos(
         &mut self,

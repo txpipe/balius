@@ -131,7 +131,7 @@ impl Ledger {
             .queries
             .read_params(req)
             .await
-            .map_err(|err| wit::LedgerError::Upstream(format!("{:?}", err)))?
+            .map_err(|err| wit::LedgerError::Upstream(format!("{err:?}")))?
             .into_inner();
 
         let params = res
