@@ -121,7 +121,7 @@ fn map_reqwest_response_err(e: reqwest::Error) -> wit::ErrorCode {
         wit::ErrorCode::HttpResponseTimeout
     } else {
         let message = match e.source() {
-            Some(source) => format!("{}: {}", e, source),
+            Some(source) => format!("{e}: {source}"),
             None => e.to_string(),
         };
         wit::ErrorCode::InternalError(Some(message))

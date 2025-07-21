@@ -132,12 +132,12 @@ async fn metrics_handler(registry: Registry) -> impl Reply {
 
     let mut buffer = Vec::new();
     if let Err(e) = encoder.encode(&registry.gather(), &mut buffer) {
-        eprintln!("could not encode custom metrics: {}", e);
+        eprintln!("could not encode custom metrics: {e}");
     };
     let res = match String::from_utf8(buffer.clone()) {
         Ok(v) => v,
         Err(e) => {
-            tracing::error!("custom metrics could not be from_utf8'd: {}", e);
+            tracing::error!("custom metrics could not be from_utf8'd: {e}");
             String::default()
         }
     };

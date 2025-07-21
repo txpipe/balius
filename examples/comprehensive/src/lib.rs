@@ -174,7 +174,7 @@ fn handle_utxo(_: Config<MyConfig>, utxo: Utxo<Datum>) -> WorkerResult<()> {
         balius_sdk::wit::balius::app::logging::log(
             balius_sdk::wit::balius::app::logging::Level::Error,
             "handle-utxo",
-            &format!("Failed to set latest utxo in kv: {}", err),
+            &format!("Failed to set latest utxo in kv: {err}"),
         );
     };
     Ok(())
