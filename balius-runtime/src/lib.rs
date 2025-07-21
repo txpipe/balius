@@ -294,7 +294,6 @@ struct WorkerState {
     pub http: Option<http::Http>,
 }
 
-#[async_trait::async_trait]
 impl wit::balius::app::driver::Host for WorkerState {
     async fn register_channel(
         &mut self,

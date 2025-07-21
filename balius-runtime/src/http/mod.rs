@@ -1,7 +1,6 @@
 use std::{error::Error, time::Duration};
 
 use crate::wit::balius::app::http as wit;
-use async_trait::async_trait;
 use reqwest::{
     header::{HeaderMap, HeaderName, HeaderValue},
     Method,
@@ -13,7 +12,6 @@ pub enum Http {
     Reqwest(reqwest::Client),
 }
 
-#[async_trait]
 impl wit::Host for Http {
     async fn request(
         &mut self,

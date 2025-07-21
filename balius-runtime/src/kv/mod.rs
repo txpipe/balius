@@ -45,7 +45,6 @@ pub trait KvProvider {
     ) -> Result<Vec<String>, KvError>;
 }
 
-#[async_trait::async_trait]
 impl wit::Host for KvHost {
     async fn get_value(&mut self, key: String) -> Result<Payload, KvError> {
         self.metrics.kv_get(&self.worker_id);
