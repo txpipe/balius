@@ -1,3 +1,4 @@
+use balius_sdk::wit::balius::app as worker;
 use balius_sdk::{Config, Error, FnHandler, Json, Params, Utxo, WorkerResult};
 
 use serde::{Deserialize, Serialize};
@@ -45,13 +46,13 @@ fn log(_: Config<MyConfig>, request: Params<LogParams>) -> WorkerResult<()> {
         };
     } else {
         let level = match request.0.level {
-            tracing::Level::TRACE => balius_sdk::wit::balius::app::logging::Level::Trace,
-            tracing::Level::DEBUG => balius_sdk::wit::balius::app::logging::Level::Debug,
-            tracing::Level::INFO => balius_sdk::wit::balius::app::logging::Level::Info,
-            tracing::Level::WARN => balius_sdk::wit::balius::app::logging::Level::Warn,
-            tracing::Level::ERROR => balius_sdk::wit::balius::app::logging::Level::Error,
+            tracing::Level::TRACE => worker::logging::Level::Trace,
+            tracing::Level::DEBUG => worker::logging::Level::Debug,
+            tracing::Level::INFO => worker::logging::Level::Info,
+            tracing::Level::WARN => worker::logging::Level::Warn,
+            tracing::Level::ERROR => worker::logging::Level::Error,
         };
-        balius_sdk::wit::balius::app::logging::log(level, "izquierda", &request.message);
+        worker::logging::log(level, "izquierda", &request.message);
     }
 
     Ok(())
@@ -70,7 +71,7 @@ struct KvGetResponse {
 
 fn kvget(_: Config<MyConfig>, request: Params<KvGetParams>) -> WorkerResult<Json<KvGetResponse>> {
     Ok(Json(KvGetResponse {
-        value: balius_sdk::wit::balius::app::kv::get_value(&request.key)
+        value: worker::kv::get_value(&request.key)
             .ok()
             .map(|x| String::from_utf8(x).unwrap()),
     }))
@@ -84,7 +85,7 @@ struct KvSetParams {
 }
 
 fn kvset(_: Config<MyConfig>, request: Params<KvSetParams>) -> WorkerResult<()> {
-    balius_sdk::wit::balius::app::kv::set_value(&request.key, request.value.as_bytes())?;
+    worker::kv::set_value(&request.key, request.value.as_bytes())?;
     Ok(())
 }
 
@@ -104,7 +105,7 @@ fn kvlist(
     request: Params<KvListParams>,
 ) -> WorkerResult<Json<KvListResponse>> {
     Ok(Json(KvListResponse {
-        keys: balius_sdk::wit::balius::app::kv::list_values(&request.prefix)?,
+        keys: worker::kv::list_values(&request.prefix)?,
     }))
 }
 
@@ -151,28 +152,62 @@ fn signer_sign_payload(
     request: Params<SignerSignPayloadParams>,
 ) -> WorkerResult<Json<SignerSignPayloadResponse>> {
     let payload = hex::decode(&request.payload).map_err(|_| Error::BadParams)?;
-    let signature = balius_sdk::wit::balius::app::sign::sign_payload(&request.key_name, &payload)?;
+    let signature = worker::sign::sign_payload(&request.key_name, &payload)?;
     Ok(Json(SignerSignPayloadResponse {
         signature: hex::encode(&signature),
     }))
+}
+
+#[serde_as]
+#[derive(Serialize, Deserialize)]
+struct LedgerSearchUtxosParams {
+    address: String,
+    max_items: u32,
+}
+
+#[serde_as]
+#[derive(Serialize, Deserialize)]
+struct LedgerSearchUtxosResponse {
+    utxos: Vec<String>,
+}
+
+fn ledger_search_utxos(
+    _: Config<MyConfig>,
+    request: Params<LedgerSearchUtxosParams>,
+) -> WorkerResult<Json<LedgerSearchUtxosResponse>> {
+    let exact_address = hex::decode(&request.address).map_err(|_| Error::BadParams)?;
+    let page = worker::ledger::search_utxos(
+        &worker::ledger::UtxoPattern {
+            address: Some(worker::ledger::AddressPattern { exact_address }),
+            asset: None,
+        },
+        None,
+        request.max_items,
+    )?;
+    let utxos = page
+        .utxos
+        .iter()
+        .map(|x| format!("{}#{}", hex::encode(&x.ref_.tx_hash), x.ref_.tx_index))
+        .collect();
+    Ok(Json(LedgerSearchUtxosResponse { utxos }))
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 struct Datum {}
 
 fn handle_utxo(_: Config<MyConfig>, utxo: Utxo<Datum>) -> WorkerResult<()> {
-    balius_sdk::wit::balius::app::logging::log(
-        balius_sdk::wit::balius::app::logging::Level::Info,
+    worker::logging::log(
+        worker::logging::Level::Info,
         "handle_utxo",
         "Updating latest utxo in key value",
     );
 
-    if let Err(err) = balius_sdk::wit::balius::app::kv::set_value(
+    if let Err(err) = worker::kv::set_value(
         "latest",
         format!("{}#{}", hex::encode(utxo.tx_hash), utxo.index).as_bytes(),
     ) {
-        balius_sdk::wit::balius::app::logging::log(
-            balius_sdk::wit::balius::app::logging::Level::Error,
+        worker::logging::log(
+            worker::logging::Level::Error,
             "handle-utxo",
             &format!("Failed to set latest utxo in kv: {err}"),
         );
@@ -185,7 +220,7 @@ fn main() -> balius_sdk::Worker {
     balius_sdk::logging::init();
     balius_sdk::Worker::new()
         .with_utxo_handler(
-            balius_sdk::wit::balius::app::driver::UtxoPattern {
+            worker::driver::UtxoPattern {
                 address: None,
                 token: None,
             },
@@ -201,6 +236,7 @@ fn main() -> balius_sdk::Worker {
             FnHandler::from(signer_get_public_key),
         )
         .with_request_handler("signer-sign-payload", FnHandler::from(signer_sign_payload))
+        .with_request_handler("ledger-search-utxos", FnHandler::from(ledger_search_utxos))
         .with_signer("alice", "ed25519")
         .with_signer("bob", "ed25519")
 }
