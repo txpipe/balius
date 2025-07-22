@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 
 use balius_runtime::{drivers, ledgers, logging::file::FileLogger, Runtime, Store};
 use boilerplate::{init_meter_provider, metrics_server};
@@ -69,6 +69,18 @@ pub enum SignerConfig {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct ReqwestHttpConfig {
+    pub timeout: Option<u64>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(tag = "type")]
+#[serde(rename_all = "lowercase")]
+pub enum HttpConfig {
+    Reqwest(ReqwestHttpConfig),
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Config {
     pub rpc: drivers::jsonrpc::Config,
     pub ledger: ledgers::u5c::Config,
@@ -80,6 +92,7 @@ pub struct Config {
     pub metrics: Option<MetricsConfig>,
     pub sign: Option<SignerConfig>,
     pub store: Option<StoreConfig>,
+    pub http: Option<HttpConfig>,
 }
 
 impl From<&Config> for balius_runtime::kv::Kv {
@@ -108,6 +121,19 @@ impl From<&Config> for balius_runtime::sign::Signer {
     fn from(_value: &Config) -> Self {
         // Only one option for now
         balius_runtime::sign::Signer::InMemory(balius_runtime::sign::in_memory::Signer::default())
+    }
+}
+impl From<&Config> for balius_runtime::http::Http {
+    fn from(value: &Config) -> Self {
+        let timeout = match &value.http {
+            Some(HttpConfig::Reqwest(cfg)) => cfg.timeout.unwrap_or(10),
+            None => 10,
+        };
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(timeout))
+            .build()
+            .expect("Failed to build http client");
+        balius_runtime::http::Http::Reqwest(client)
     }
 }
 
