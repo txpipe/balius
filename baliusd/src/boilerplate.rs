@@ -10,7 +10,7 @@ use tracing::{debug, warn};
 use tracing_subscriber::{filter::Targets, prelude::*};
 use warp::{reply::Reply, Filter};
 
-use crate::{LoggingConfig, MetricsConfig};
+use crate::config::{LoggingConfig, MetricsConfig};
 
 pub fn setup_tracing(config: &LoggingConfig) -> miette::Result<()> {
     let level = config.max_level;

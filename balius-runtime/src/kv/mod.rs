@@ -9,6 +9,7 @@ pub use wit::{Host as CustomKv, KvError, Payload};
 pub enum Kv {
     Mock,
     Memory(Arc<RwLock<memory::MemoryKv>>),
+    Redb(Arc<RwLock<redb::RedbKv>>),
     Custom(Arc<Mutex<dyn KvProvider + Send + Sync>>),
 }
 
@@ -28,6 +29,7 @@ impl KvHost {
 }
 
 pub mod memory;
+pub mod redb;
 
 #[async_trait::async_trait]
 pub trait KvProvider {
@@ -57,6 +59,13 @@ impl wit::Host for KvHost {
                     .get_value(&self.worker_id, key)
                     .await
             }
+            Kv::Redb(kv) => {
+                kv.read()
+                    .await
+                    .clone()
+                    .get_value(&self.worker_id, key)
+                    .await
+            }
             Kv::Custom(kv) => {
                 let mut lock = kv.lock().await;
                 lock.get_value(&self.worker_id, key).await
@@ -74,6 +83,14 @@ impl wit::Host for KvHost {
                     .set_value(&self.worker_id, key, value)
                     .await
             }
+            Kv::Redb(kv) => {
+                kv.read()
+                    .await
+                    .clone()
+                    .set_value(&self.worker_id, key, value)
+                    .await
+            }
+
             Kv::Custom(kv) => {
                 let mut lock = kv.lock().await;
                 lock.set_value(&self.worker_id, key, value).await
@@ -92,6 +109,14 @@ impl wit::Host for KvHost {
                     .list_values(&self.worker_id, prefix)
                     .await
             }
+            Kv::Redb(kv) => {
+                kv.read()
+                    .await
+                    .clone()
+                    .list_values(&self.worker_id, prefix)
+                    .await
+            }
+
             Kv::Custom(kv) => {
                 let mut lock = kv.lock().await;
                 lock.list_values(&self.worker_id, prefix).await
