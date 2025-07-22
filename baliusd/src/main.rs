@@ -1,6 +1,8 @@
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, net::SocketAddr, path::PathBuf, sync::Arc};
 
-use balius_runtime::{drivers, ledgers, logging::file::FileLogger, Runtime, Store};
+use balius_runtime::{
+    drivers, ledgers, logging::file::FileLogger, sign::in_memory::SignerKey, Runtime, Store,
+};
 use boilerplate::{init_meter_provider, metrics_server};
 use miette::{Context as _, IntoDiagnostic as _};
 use prometheus::Registry;
@@ -61,14 +63,19 @@ pub struct MetricsConfig {
     pub listen_address: SocketAddr,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug)]
+pub struct MemorySignerConfig {
+    pub keys: Option<HashMap<String, HashMap<String, SignerKey>>>,
+}
+
+#[derive(Deserialize, Clone, Debug)]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
 pub enum SignerConfig {
-    Memory,
+    Memory(MemorySignerConfig),
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct Config {
     pub rpc: drivers::jsonrpc::Config,
     pub ledger: ledgers::u5c::Config,
@@ -105,9 +112,18 @@ impl From<&Config> for balius_runtime::logging::Logger {
     }
 }
 impl From<&Config> for balius_runtime::sign::Signer {
-    fn from(_value: &Config) -> Self {
+    fn from(value: &Config) -> Self {
         // Only one option for now
-        balius_runtime::sign::Signer::InMemory(balius_runtime::sign::in_memory::Signer::default())
+        let signer = if let Some(SignerConfig::Memory(cfg)) = &value.sign {
+            if let Some(keys) = &cfg.keys {
+                balius_runtime::sign::in_memory::Signer::from(keys.clone())
+            } else {
+                Default::default()
+            }
+        } else {
+            Default::default()
+        };
+        balius_runtime::sign::Signer::InMemory(signer)
     }
 }
 
