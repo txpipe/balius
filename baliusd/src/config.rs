@@ -158,7 +158,6 @@ impl From<&Config> for balius_runtime::logging::Logger {
 
 impl From<&Config> for balius_runtime::sign::Signer {
     fn from(value: &Config) -> Self {
-        // Only one option for now
         let signer = if let Some(SignerConfig::Memory(cfg)) = &value.signing {
             if let Some(keys) = &cfg.keys {
                 let mut map: HashMap<String, HashMap<String, SignerKey>> = HashMap::new();
