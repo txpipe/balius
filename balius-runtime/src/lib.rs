@@ -72,6 +72,9 @@ pub enum Error {
 
     #[error("failed to interact with local WASM file: {0}")]
     IoError(std::io::Error),
+
+    #[error("kv error {0}")]
+    KvError(String),
 }
 
 impl From<wasmtime::Error> for Error {
