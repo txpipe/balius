@@ -1,17 +1,22 @@
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, net::SocketAddr, path::PathBuf, sync::Arc};
 
-use balius_runtime::{drivers, ledgers, logging::file::FileLogger};
-use serde::{Deserialize, Serialize};
+use balius_runtime::{
+    drivers, ledgers,
+    logging::file::FileLogger,
+    sign::in_memory::{Ed25519Key, SignerKey},
+};
+use pallas::crypto::key::ed25519;
+use serde::Deserialize;
 use serde_with::{serde_as, DisplayFromStr};
 use tokio::sync::{Mutex, RwLock};
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct StoreConfig {
     pub path: PathBuf,
 }
 
 #[serde_as]
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct LoggingConfig {
     #[serde_as(as = "DisplayFromStr")]
     pub max_level: tracing::Level,
@@ -20,13 +25,13 @@ pub struct LoggingConfig {
     pub include_tokio: bool,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct RedbKvConfig {
     pub path: PathBuf,
     pub cache_size: Option<usize>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug)]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
 pub enum KvConfig {
@@ -34,12 +39,12 @@ pub enum KvConfig {
     Redb(RedbKvConfig),
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct FileLoggerConfig {
     pub folder: Option<PathBuf>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug)]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
 pub enum LoggerConfig {
@@ -48,7 +53,7 @@ pub enum LoggerConfig {
     File(FileLoggerConfig),
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct WorkerConfig {
     pub name: String,
     pub module: PathBuf,
@@ -57,19 +62,59 @@ pub struct WorkerConfig {
     pub config: Option<PathBuf>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct MetricsConfig {
     pub listen_address: SocketAddr,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug)]
+pub struct MemorySignerKeyConfig {
+    pub worker: String,
+    pub name: String,
+    pub algorithm: String,
+    #[serde(with = "hex::serde")]
+    pub private_key: Vec<u8>,
+}
+
+impl From<&MemorySignerKeyConfig> for SignerKey {
+    fn from(value: &MemorySignerKeyConfig) -> Self {
+        if value.algorithm != "ed25519" {
+            panic!("Only ed25519 keys are supported")
+        }
+
+        if let Ok(fixed_array) =
+            <&[u8; ed25519::SecretKey::SIZE]>::try_from(value.private_key.as_slice())
+        {
+            return SignerKey::Ed25519(Ed25519Key::SecretKey(ed25519::SecretKey::from(
+                fixed_array.to_owned(),
+            )));
+        }
+
+        if let Ok(fixed_array) =
+            <&[u8; ed25519::SecretKeyExtended::SIZE]>::try_from(value.private_key.as_slice())
+        {
+            if let Ok(key) = ed25519::SecretKeyExtended::from_bytes(fixed_array.to_owned()) {
+                return SignerKey::Ed25519(Ed25519Key::SecretKeyExtended(key));
+            }
+        }
+
+        panic!("Invalid key: {value:?}");
+    }
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct MemorySignerConfig {
+    pub keys: Option<Vec<MemorySignerKeyConfig>>,
+}
+
+#[derive(Deserialize, Clone, Debug)]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
 pub enum SignerConfig {
-    Memory,
+    Memory(MemorySignerConfig),
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct Config {
     pub rpc: drivers::jsonrpc::Config,
     pub ledger: ledgers::u5c::Config,
@@ -79,7 +124,7 @@ pub struct Config {
     pub kv: Option<KvConfig>,
     pub logger: Option<LoggerConfig>,
     pub metrics: Option<MetricsConfig>,
-    pub sign: Option<SignerConfig>,
+    pub signing: Option<SignerConfig>,
     pub store: Option<StoreConfig>,
 }
 
@@ -97,6 +142,7 @@ impl From<&Config> for balius_runtime::kv::Kv {
         }
     }
 }
+
 impl From<&Config> for balius_runtime::logging::Logger {
     fn from(value: &Config) -> Self {
         match &value.logger {
@@ -109,9 +155,23 @@ impl From<&Config> for balius_runtime::logging::Logger {
         }
     }
 }
+
 impl From<&Config> for balius_runtime::sign::Signer {
-    fn from(_value: &Config) -> Self {
-        // Only one option for now
-        balius_runtime::sign::Signer::InMemory(balius_runtime::sign::in_memory::Signer::default())
+    fn from(value: &Config) -> Self {
+        let signer = if let Some(SignerConfig::Memory(cfg)) = &value.signing {
+            if let Some(keys) = &cfg.keys {
+                let mut map: HashMap<String, HashMap<String, SignerKey>> = HashMap::new();
+                for key in keys {
+                    let worker_map = map.entry(key.worker.clone()).or_default();
+                    worker_map.insert(key.name.clone(), key.into());
+                }
+                balius_runtime::sign::in_memory::Signer::from(map)
+            } else {
+                Default::default()
+            }
+        } else {
+            Default::default()
+        };
+        balius_runtime::sign::Signer::InMemory(signer)
     }
 }

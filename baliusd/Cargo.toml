@@ -16,7 +16,9 @@ exclude = [
 [dependencies]
 balius-runtime = { version = "0.4.0", path = "../balius-runtime" }
 gasket = { version = "0.8.0", features = ["derive"] }
+hex = { version = "0.4.3", features = ["serde"] }
 miette = { version = "7.2.0", features = ["fancy"] }
+pallas = "0.32.0"
 serde = { version = "1.0.213", features = ["derive"] }
 serde_json = "1.0.132"
 serde_with = "3.11.0"
