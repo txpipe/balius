@@ -1,4 +1,4 @@
-use std::{collections::HashMap, net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 
 use balius_runtime::{
     drivers, ledgers,
@@ -115,6 +115,18 @@ pub enum SignerConfig {
 }
 
 #[derive(Deserialize, Clone, Debug)]
+pub struct ReqwestHttpConfig {
+    pub timeout: Option<u64>,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+#[serde(tag = "type")]
+#[serde(rename_all = "lowercase")]
+pub enum HttpConfig {
+    Reqwest(ReqwestHttpConfig),
+}
+
+#[derive(Deserialize, Clone, Debug)]
 pub struct Config {
     pub rpc: drivers::jsonrpc::Config,
     pub ledger: ledgers::u5c::Config,
@@ -126,6 +138,7 @@ pub struct Config {
     pub metrics: Option<MetricsConfig>,
     pub signing: Option<SignerConfig>,
     pub store: Option<StoreConfig>,
+    pub http: Option<HttpConfig>,
 }
 
 impl From<&Config> for balius_runtime::kv::Kv {
@@ -173,5 +186,19 @@ impl From<&Config> for balius_runtime::sign::Signer {
             Default::default()
         };
         balius_runtime::sign::Signer::InMemory(signer)
+    }
+}
+
+impl From<&Config> for balius_runtime::http::Http {
+    fn from(value: &Config) -> Self {
+        let timeout = match &value.http {
+            Some(HttpConfig::Reqwest(cfg)) => cfg.timeout.unwrap_or(10),
+            None => 10,
+        };
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(timeout))
+            .build()
+            .expect("Failed to build http client");
+        balius_runtime::http::Http::Reqwest(client)
     }
 }
