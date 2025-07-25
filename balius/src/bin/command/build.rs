@@ -1,5 +1,5 @@
-use std::process::Command;
 use balius::utils::get_project_info;
+use std::process::Command;
 
 pub fn execute() {
     println!("Building...");
@@ -17,17 +17,14 @@ pub fn execute() {
     println!("Turning into component...");
 
     let (target_dir, package_name) = get_project_info();
-    let wasm_file = target_dir.join(format!(
-        "wasm32-unknown-unknown/debug/{}.wasm",
-        package_name
-    ));
+    let wasm_file = target_dir.join(format!("wasm32-unknown-unknown/debug/{package_name}.wasm",));
 
     let mut cmd = Command::new("wasm-tools");
     cmd.arg("component");
     cmd.arg("new");
     cmd.arg(&wasm_file);
     cmd.arg("-o");
-    cmd.arg(format!("{}-c.wasm", package_name));
+    cmd.arg(format!("{package_name}-c.wasm"));
 
     let status = cmd.status().unwrap();
 

@@ -1,1 +1,4 @@
-shared-version = true
+push = false
+publish = false
+tag-name = "v{{version}}"
+pre-release-commit-message = "release: v{{version}}"

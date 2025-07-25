@@ -8,6 +8,7 @@ use thiserror::Error;
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 use utxorpc::spec::sync::BlockRef;
+use wasmtime::component::HasSelf;
 
 pub mod wit {
     wasmtime::component::bindgen!({
@@ -72,6 +73,9 @@ pub enum Error {
 
     #[error("failed to interact with local WASM file: {0}")]
     IoError(std::io::Error),
+
+    #[error("kv error {0}")]
+    KvError(String),
 }
 
 impl From<wasmtime::Error> for Error {
@@ -132,7 +136,7 @@ impl From<object_store::Error> for Error {
     fn from(value: object_store::Error) -> Self {
         match value {
             object_store::Error::Generic { store, source } => {
-                Self::Config(format!("Failed to parse url: {}, {}", store, source))
+                Self::Config(format!("Failed to parse url: {store}, {source}"))
             }
             object_store::Error::NotFound { path: _, source } => {
                 Self::WorkerNotFound(source.to_string())
@@ -295,7 +299,6 @@ struct WorkerState {
     pub http: Option<http::Http>,
 }
 
-#[async_trait::async_trait]
 impl wit::balius::app::driver::Host for WorkerState {
     async fn register_channel(
         &mut self,
@@ -654,6 +657,11 @@ impl Runtime {
     }
 }
 
+struct HasField<T>(std::marker::PhantomData<T>);
+impl<T: 'static> wasmtime::component::HasData for HasField<T> {
+    type Data<'a> = &'a mut T;
+}
+
 pub struct RuntimeBuilder {
     store: store::Store,
     engine: wasmtime::Engine,
@@ -673,8 +681,11 @@ impl RuntimeBuilder {
         let engine = wasmtime::Engine::new(&config).unwrap();
         let mut linker = wasmtime::component::Linker::new(&engine);
 
-        wit::balius::app::driver::add_to_linker(&mut linker, |state: &mut WorkerState| state)
-            .unwrap();
+        wit::balius::app::driver::add_to_linker::<_, HasSelf<_>>(
+            &mut linker,
+            |state: &mut WorkerState| state,
+        )
+        .unwrap();
 
         Self {
             store,
@@ -692,18 +703,20 @@ impl RuntimeBuilder {
     pub fn with_ledger(mut self, ledger: ledgers::Ledger) -> Self {
         self.ledger = Some(ledger);
 
-        wit::balius::app::ledger::add_to_linker(&mut self.linker, |state: &mut WorkerState| {
-            state.ledger.as_mut().unwrap()
-        })
+        wit::balius::app::ledger::add_to_linker::<_, HasField<_>>(
+            &mut self.linker,
+            |state: &mut WorkerState| state.ledger.as_mut().unwrap(),
+        )
         .unwrap();
 
         self
     }
 
     pub fn with_kv(mut self, kv: kv::Kv) -> Self {
-        wit::balius::app::kv::add_to_linker(&mut self.linker, |state: &mut WorkerState| {
-            state.kv.as_mut().unwrap()
-        })
+        wit::balius::app::kv::add_to_linker::<_, HasField<_>>(
+            &mut self.linker,
+            |state: &mut WorkerState| state.kv.as_mut().unwrap(),
+        )
         .unwrap();
         self.kv = Some(kv);
 
@@ -713,9 +726,10 @@ impl RuntimeBuilder {
     pub fn with_logger(mut self, logging: logging::Logger) -> Self {
         self.logging = Some(logging);
 
-        wit::balius::app::logging::add_to_linker(&mut self.linker, |state: &mut WorkerState| {
-            state.logging.as_mut().unwrap()
-        })
+        wit::balius::app::logging::add_to_linker::<_, HasField<_>>(
+            &mut self.linker,
+            |state: &mut WorkerState| state.logging.as_mut().unwrap(),
+        )
         .unwrap();
 
         self
@@ -724,9 +738,10 @@ impl RuntimeBuilder {
     pub fn with_signer(mut self, sign: sign::Signer) -> Self {
         self.sign = Some(sign);
 
-        wit::balius::app::sign::add_to_linker(&mut self.linker, |state: &mut WorkerState| {
-            state.sign.as_mut().unwrap()
-        })
+        wit::balius::app::sign::add_to_linker::<_, HasField<_>>(
+            &mut self.linker,
+            |state: &mut WorkerState| state.sign.as_mut().unwrap(),
+        )
         .unwrap();
 
         self
@@ -735,9 +750,10 @@ impl RuntimeBuilder {
     pub fn with_submit(mut self, submit: submit::Submit) -> Self {
         self.submit = Some(submit);
 
-        wit::balius::app::submit::add_to_linker(&mut self.linker, |state: &mut WorkerState| {
-            state.submit.as_mut().unwrap()
-        })
+        wit::balius::app::submit::add_to_linker::<_, HasField<_>>(
+            &mut self.linker,
+            |state: &mut WorkerState| state.submit.as_mut().unwrap(),
+        )
         .unwrap();
 
         self
@@ -745,9 +761,10 @@ impl RuntimeBuilder {
 
     pub fn with_http(mut self, http: http::Http) -> Self {
         self.http = Some(http);
-        wit::balius::app::http::add_to_linker(&mut self.linker, |state: &mut WorkerState| {
-            state.http.as_mut().unwrap()
-        })
+        wit::balius::app::http::add_to_linker::<_, HasField<_>>(
+            &mut self.linker,
+            |state: &mut WorkerState| state.http.as_mut().unwrap(),
+        )
         .unwrap();
 
         self

@@ -1,6 +1,6 @@
 [package]
 name = "balius-runtime"
-version = "0.3.4"
+version = "0.4.0"
 edition = "2021"
 
 description = "Runtime for run Headless dApps on UTxO-based blockchains"
@@ -10,7 +10,7 @@ repository = "https://github.com/txpipe/balius"
 [dependencies]
 chrono = "0.4.41"
 thiserror = "2.0.11"
-wasmtime = { version = "28.0.1" }
+wasmtime = { version = "34.0.2" }
 warp = { version = "0.3.7" }
 flate2 = "1.0.33"
 tar = "0.4.41"
@@ -29,7 +29,7 @@ tokio-util = "0.7.12"
 prost = "0.13"
 object_store = { version = "0.12.0", features = ["fs"] }
 url = "2.5.4"
-reqwest = "0.12.15"
+reqwest = { version = "0.12.15", default-features = false, features = ["http2", "charset", "macos-system-configuration"] }
 opentelemetry = { version = "0.29.1", features = ["metrics", "trace"] }
 rand = "0.8.5"
 
@@ -39,7 +39,13 @@ wat = "1"
 wit-component = "0.225"
 
 [features]
+default = ["default-tls"]
 http = ["object_store/http"]
 aws = ["object_store/aws"]
 gcp = ["object_store/gcp"]
 azure = ["object_store/azure"]
+default-tls = ["reqwest/default-tls"]
+rustls-tls = ["reqwest/rustls-tls"]
+rustls-tls-manual-roots = ["reqwest/rustls-tls-manual-roots"]
+rustls-tls-webpki-roots = ["reqwest/rustls-tls-webpki-roots"]
+rustls-tls-native-roots = ["reqwest/rustls-tls-native-roots"]

@@ -54,7 +54,6 @@ pub trait SignerProvider {
     ) -> Result<wit::Signature, wit::SignError>;
 }
 
-#[async_trait::async_trait]
 impl wit::Host for SignerHost {
     async fn sign_payload(
         &mut self,

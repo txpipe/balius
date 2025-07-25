@@ -1,7 +1,6 @@
 use std::{error::Error, time::Duration};
 
 use crate::wit::balius::app::http as wit;
-use async_trait::async_trait;
 use reqwest::{
     header::{HeaderMap, HeaderName, HeaderValue},
     Method,
@@ -13,7 +12,6 @@ pub enum Http {
     Reqwest(reqwest::Client),
 }
 
-#[async_trait]
 impl wit::Host for Http {
     async fn request(
         &mut self,
@@ -123,7 +121,7 @@ fn map_reqwest_response_err(e: reqwest::Error) -> wit::ErrorCode {
         wit::ErrorCode::HttpResponseTimeout
     } else {
         let message = match e.source() {
-            Some(source) => format!("{}: {}", e, source),
+            Some(source) => format!("{e}: {source}"),
             None => e.to_string(),
         };
         wit::ErrorCode::InternalError(Some(message))

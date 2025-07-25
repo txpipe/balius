@@ -48,7 +48,6 @@ pub trait LoggerProvider {
     async fn log(&mut self, worker_id: &str, level: wit::Level, context: String, message: String);
 }
 
-#[async_trait]
 impl wit::Host for LoggerHost {
     async fn log(&mut self, level: wit::Level, context: String, message: String) {
         self.metrics.log(&self.worker_id, &level);
