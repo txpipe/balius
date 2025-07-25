@@ -1,4 +1,5 @@
 use kv::KvHost;
+use ledgers::LedgerHost;
 use logging::LoggerHost;
 use router::Router;
 use sign::SignerHost;
@@ -290,7 +291,7 @@ impl Block {
 struct WorkerState {
     pub worker_id: String,
     pub router: router::Router,
-    pub ledger: Option<ledgers::Ledger>,
+    pub ledger: Option<ledgers::LedgerHost>,
     pub logging: Option<logging::LoggerHost>,
     pub kv: Option<kv::KvHost>,
     pub sign: Option<sign::SignerHost>,
@@ -524,13 +525,22 @@ impl Runtime {
             WorkerState {
                 worker_id: id.to_owned(),
                 router: Router::new(),
-                ledger: self.ledger.clone(),
-                logging: self.logging.as_ref().map(|kv| LoggerHost::new(id, kv)),
+                ledger: self
+                    .ledger
+                    .as_ref()
+                    .map(|l| LedgerHost::new(id, l, &self.metrics)),
+                logging: self
+                    .logging
+                    .as_ref()
+                    .map(|kv| LoggerHost::new(id, kv, &self.metrics)),
                 kv: self
                     .kv
                     .as_ref()
                     .map(|kv| KvHost::new(id, kv, &self.metrics)),
-                sign: self.sign.as_ref().map(|s| SignerHost::new(id, s)),
+                sign: self
+                    .sign
+                    .as_ref()
+                    .map(|s| SignerHost::new(id, s, &self.metrics)),
                 submit: self.submit.clone(),
                 http: self.http.clone(),
             },
