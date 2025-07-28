@@ -18,8 +18,14 @@ members = [
 ]
 
 [workspace.metadata.release]
+cargo-dist-build = ["baliusd"]
 push = false
 publish = false
 tag-name = "v{{version}}"
 pre-release-commit-message = "release: v{{version}}"
 pre-release-hook = ["git", "cliff", "-o", "CHANGELOG.md", "--tag", "{{version}}"]
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
