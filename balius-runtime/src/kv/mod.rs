@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
-use crate::{metrics::Metrics, wit::balius::app::kv as wit};
+use crate::{metrics::Metrics, wit::balius::app::kv as wit, Error};
 
 pub use wit::{Host as CustomKv, KvError, Payload};
 
@@ -11,6 +11,21 @@ pub enum Kv {
     Memory(Arc<RwLock<memory::MemoryKv>>),
     Redb(Arc<RwLock<redb::RedbKv>>),
     Custom(Arc<Mutex<dyn KvProvider + Send + Sync>>),
+}
+
+impl Kv {
+    pub async fn into_ephemeral(self) -> Result<Self, Error> {
+        match self {
+            Kv::Mock => Ok(self),
+            Kv::Memory(x) => Ok(Kv::Memory(x)),
+            Kv::Redb(x) => Ok(Kv::Redb(Arc::new(RwLock::new(
+                x.write().await.into_ephemeral()?,
+            )))),
+            Kv::Custom(_) => Err(Error::KvError(
+                "Cannot convert custom kv into ephemeral".to_string(),
+            )),
+        }
+    }
 }
 
 pub struct KvHost {

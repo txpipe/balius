@@ -108,6 +108,42 @@ impl Store {
         Ok(out)
     }
 
+    pub fn into_ephemeral(&mut self) -> Result<Self, super::Error> {
+        let new_db =
+            redb::Database::builder().create_with_backend(redb::backends::InMemoryBackend::new())?;
+
+        let rx = self.db.begin_read()?;
+        let wx = new_db.begin_write()?;
+
+        {
+            let source = rx.open_table(WAL)?;
+            let mut target = wx.open_table(WAL)?;
+
+            for entry in source.iter()? {
+                let (k, v) = entry?;
+                target.insert(k.value(), v.value())?;
+            }
+
+            let source = rx.open_table(CURSORS)?;
+            let mut target = wx.open_table(CURSORS)?;
+
+            for entry in source.iter()? {
+                let (k, v) = entry?;
+                target.insert(k.value(), v.value())?;
+            }
+        }
+
+        wx.commit()?;
+
+        let log_seq = Self::load_log_seq(&new_db)?.unwrap_or_default();
+        let new = Store {
+            db: Arc::new(new_db),
+            log_seq,
+        };
+
+        Ok(new)
+    }
+
     fn load_log_seq(db: &redb::Database) -> Result<Option<LogSeq>, Error> {
         let rx = db.begin_read()?;
 

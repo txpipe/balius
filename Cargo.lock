@@ -334,6 +334,7 @@ name = "baliusd"
 version = "0.3.4"
 dependencies = [
  "balius-runtime",
+ "clap",
  "config",
  "gasket",
  "hex",
