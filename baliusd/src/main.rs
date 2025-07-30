@@ -53,6 +53,7 @@ async fn main() -> miette::Result<()> {
         .with_kv((&config).into())
         .with_logger((&config).into())
         .with_signer((&config).into())
+        .with_http((&config).into())
         .build()
         .into_diagnostic()
         .context("setting up runtime")?;
