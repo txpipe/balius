@@ -15,10 +15,12 @@ cargo install baliusd
 ## Usage
 
 Run the daemon (it automatically loads configuration files and environment
-variable overrides):
+variable overrides). You can also enable debug mode with the `--debug` flag,
+which loads both the chain cursor store and key-value backend into ephemeral
+(in-memory) mode so that all runtime state is lost when the process exits:
 
 ```bash
-baliusd
+baliusd --debug
 ```
 
 ## Configuration
