@@ -80,7 +80,13 @@ endpoint_url = "http://localhost:50051"
 
 # Key value backend.
 [kv]
+# Ephemeral memory backend, with initial state.
 type = "memory"
+
+[[kv.keys]]
+worker = "worker"
+key = "key"
+value = "68656c6c6f"  # Hex encoded value
 
 # ReDB for having persistence across restarts.
 # type = "redb"
@@ -157,8 +163,15 @@ config = "comprehensive.json"
 ### [kv] (optional)
 
 - **type** (`"memory"` or `"redb"`): Type of key-value store.
+- **keys** (array of tables, optional for `"memory"`): List of initial key-value pairs to populate the store.
+  Each `[[kv.keys]]` entry:
+  
+  - **worker** (string): Name of the worker to scope the key to.
+  - **key** (string): Key.
+  - **value** (string): Hex-encoded value.
+
 - **path** (string, required for `"redb"`): Filesystem path for the Redb store.
-- **cache_size** (integer, optional): Cache size in bytes for Redb.
+- **cache_size** (integer, optional for `"redb"`): Cache size in bytes for Redb.
 
 > **Default**: If the `[kv]` section is omitted, an in-memory mock KV store is
 > used (no persistence).
