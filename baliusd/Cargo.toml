@@ -1,8 +1,8 @@
 [package]
 name = "baliusd"
-version = "0.3.4"
+version = "0.4.0"
 edition = "2021"
-publish = false
+publish = true
 
 description = "A standalone Balius runtime that can be used as a daemon"
 license = "Apache-2.0"
@@ -37,4 +37,7 @@ prometheus = "0.14.0"
 warp = "0.3.7"
 
 [package.metadata.release]
-release = false
+release = true
+
+[package.metadata.dist]
+dist = true
