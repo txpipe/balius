@@ -12,6 +12,12 @@ pub struct MemoryKv {
     map: BTreeMap<String, BTreeMap<String, Vec<u8>>>,
 }
 
+impl From<BTreeMap<String, BTreeMap<String, Vec<u8>>>> for MemoryKv {
+    fn from(value: BTreeMap<String, BTreeMap<String, Vec<u8>>>) -> Self {
+        Self { map: value }
+    }
+}
+
 #[async_trait::async_trait]
 impl KvProvider for MemoryKv {
     async fn get_value(&mut self, worker_id: &str, key: String) -> Result<Payload, KvError> {
