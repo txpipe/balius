@@ -2,7 +2,7 @@
 use std::{path::Path, sync::Arc};
 
 use crate::wit::balius::app::kv as wit;
-use redb::{Database, Durability, TableDefinition};
+use redb::{Database, Durability, ReadableTable, TableDefinition};
 use tracing::warn;
 use wit::{KvError, Payload};
 
@@ -36,6 +36,39 @@ impl RedbKv {
 
     pub fn key_for_worker(worker_id: &str, key: &str) -> String {
         format!("{worker_id}-{key}")
+    }
+
+    pub fn into_ephemeral(&mut self) -> Result<Self, Error> {
+        let new_db = redb::Database::builder()
+            .create_with_backend(redb::backends::InMemoryBackend::new())
+            .map_err(|e| Error::KvError(e.to_string()))?;
+
+        let rx = self.db.begin_read()?;
+        let wx = new_db.begin_write()?;
+
+        {
+            let source = rx
+                .open_table(Self::DEF)
+                .map_err(|e| Error::KvError(e.to_string()))?;
+            let mut target = wx
+                .open_table(Self::DEF)
+                .map_err(|e| Error::KvError(e.to_string()))?;
+
+            for entry in source.iter().map_err(|e| Error::KvError(e.to_string()))? {
+                let (k, v) = entry.map_err(|e| Error::KvError(e.to_string()))?;
+                target
+                    .insert(k.value(), v.value())
+                    .map_err(|e| Error::KvError(e.to_string()))?;
+            }
+        }
+
+        wx.commit().map_err(|e| Error::KvError(e.to_string()))?;
+
+        let new = Self {
+            db: Arc::new(new_db),
+        };
+
+        Ok(new)
     }
 }
 

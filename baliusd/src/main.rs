@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use balius_runtime::{drivers, ledgers, Runtime, Store};
 use boilerplate::{init_meter_provider, metrics_server};
+use clap::Parser;
 use miette::{Context as _, IntoDiagnostic as _};
 use prometheus::Registry;
 use tracing::info;
@@ -24,17 +25,25 @@ fn load_worker_config(config_path: Option<PathBuf>) -> miette::Result<serde_json
     }
 }
 
+#[derive(Debug, Parser)]
+struct Args {
+    // Run in debug mode
+    #[arg(short, long, action)]
+    debug: bool,
+}
+
 #[tokio::main]
 async fn main() -> miette::Result<()> {
     let config: config::Config = boilerplate::load_config(&None)
         .into_diagnostic()
         .context("loading config")?;
+    let args = Args::parse();
 
     let registry = Registry::new();
     init_meter_provider(registry.clone())?;
     boilerplate::setup_tracing(&config.logging).unwrap();
 
-    let store = match config.store.as_ref() {
+    let mut store = match config.store.as_ref() {
         Some(cfg) => Store::open(cfg.path.clone(), None)
             .into_diagnostic()
             .context("opening store")?,
@@ -43,14 +52,33 @@ async fn main() -> miette::Result<()> {
             .context("opening in memory store")?,
     };
 
+    if args.debug {
+        info!("converting store into ephemeral for debug mode");
+        store = store
+            .into_ephemeral()
+            .into_diagnostic()
+            .context("converting store into ephemeral")?;
+    }
+
     let ledger = ledgers::u5c::Ledger::new(&config.ledger)
         .await
         .into_diagnostic()
         .context("setting up ledger")?;
 
+    let mut kv: balius_runtime::kv::Kv = (&config).into();
+
+    if args.debug {
+        info!("converting kv into ephemeral for debug mode");
+        kv = kv
+            .into_ephemeral()
+            .await
+            .into_diagnostic()
+            .context("converting kv into ephemeral")?;
+    }
+
     let runtime = Runtime::builder(store)
         .with_ledger(ledger.into())
-        .with_kv((&config).into())
+        .with_kv(kv)
         .with_logger((&config).into())
         .with_signer((&config).into())
         .build()
