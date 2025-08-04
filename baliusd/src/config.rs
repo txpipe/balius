@@ -1,4 +1,10 @@
-use std::{collections::HashMap, net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    collections::{BTreeMap, HashMap},
+    net::SocketAddr,
+    path::PathBuf,
+    sync::Arc,
+    time::Duration,
+};
 
 use balius_runtime::{
     drivers, ledgers,
@@ -32,10 +38,23 @@ pub struct RedbKvConfig {
 }
 
 #[derive(Deserialize, Clone, Debug)]
+pub struct MemoryKvConfig {
+    pub keys: Option<Vec<MemoryKvKeyConfig>>,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct MemoryKvKeyConfig {
+    pub worker: String,
+    pub key: String,
+    #[serde(with = "hex::serde")]
+    pub value: Vec<u8>,
+}
+
+#[derive(Deserialize, Clone, Debug)]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
 pub enum KvConfig {
-    Memory,
+    Memory(MemoryKvConfig),
     Redb(RedbKvConfig),
 }
 
@@ -144,9 +163,20 @@ pub struct Config {
 impl From<&Config> for balius_runtime::kv::Kv {
     fn from(value: &Config) -> Self {
         match &value.kv {
-            Some(KvConfig::Memory) => balius_runtime::kv::Kv::Custom(Arc::new(Mutex::new(
-                balius_runtime::kv::memory::MemoryKv::default(),
-            ))),
+            Some(KvConfig::Memory(cfg)) => {
+                let kv = match cfg.keys.clone() {
+                    Some(keys) => {
+                        let mut map: BTreeMap<String, BTreeMap<String, Vec<u8>>> = BTreeMap::new();
+                        for key in keys {
+                            let worker_map = map.entry(key.worker).or_default();
+                            worker_map.insert(key.key, key.value);
+                        }
+                        balius_runtime::kv::memory::MemoryKv::from(map)
+                    }
+                    None => balius_runtime::kv::memory::MemoryKv::default(),
+                };
+                balius_runtime::kv::Kv::Custom(Arc::new(Mutex::new(kv)))
+            }
             Some(KvConfig::Redb(cfg)) => balius_runtime::kv::Kv::Redb(Arc::new(RwLock::new(
                 balius_runtime::kv::redb::RedbKv::try_new(&cfg.path, cfg.cache_size)
                     .expect("Failed to open Redb KV store"),
