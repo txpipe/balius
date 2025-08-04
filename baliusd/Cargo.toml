@@ -1,6 +1,6 @@
 [package]
 name = "baliusd"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 publish = true
 
@@ -14,7 +14,7 @@ exclude = [
 ]
 
 [dependencies]
-balius-runtime = { version = "0.4.0", path = "../balius-runtime" }
+balius-runtime = { version = "0.5.0", path = "../balius-runtime" }
 clap = { version = "4.5.37", features = ["derive"] }
 config = { version = "0.13.3", default-features = false, features = ["toml", "json"] }
 gasket = { version = "0.8.0", features = ["derive"] }
