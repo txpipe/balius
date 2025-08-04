@@ -8,7 +8,7 @@ members = [
     # "examples/ticket-vending-machine",
     "examples/minter/offchain",
     "examples/wallet/offchain",
-    "examples/asteria-admin",
+    # "examples/asteria-admin",
     "examples/telchar",
     "examples/comprehensive",
     "balius-sdk",
