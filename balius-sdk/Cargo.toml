@@ -1,6 +1,6 @@
 [package]
 name = "balius-sdk"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 
 description = "SDK for building Headless dApps on UTxO-based blockchains"
@@ -10,7 +10,7 @@ readme = "README.md"
 
 [dependencies]
 utxorpc-spec = { version = "0.16.0", features = ["ledgers"], default-features = false }
-balius-macros = { version = "0.5.0", path = "../balius-macros" }
+balius-macros = { version = "0.5.1", path = "../balius-macros" }
 hex = "0.4.3"
 pallas-addresses = { version = "0.32.0" }
 pallas-codec = { version = "0.32.0" }
