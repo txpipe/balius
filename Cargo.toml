@@ -21,3 +21,12 @@ members = [
 [profile.dist]
 inherits = "release"
 lto = "thin"
+
+
+[workspace.dependencies]
+reqwest = { version = "0.12.22", default-features = false, features = [
+    "rustls-tls-webpki-roots",
+    "http2",
+    "charset",
+    "macos-system-configuration",
+] }
