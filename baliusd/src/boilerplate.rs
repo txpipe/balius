@@ -10,7 +10,7 @@ use tracing::{debug, warn};
 use tracing_subscriber::{filter::Targets, prelude::*};
 use warp::{reply::Reply, Filter};
 
-use crate::{LoggingConfig, MetricsConfig};
+use crate::config::{LoggingConfig, MetricsConfig};
 
 pub fn setup_tracing(config: &LoggingConfig) -> miette::Result<()> {
     let level = config.max_level;
@@ -132,12 +132,12 @@ async fn metrics_handler(registry: Registry) -> impl Reply {
 
     let mut buffer = Vec::new();
     if let Err(e) = encoder.encode(&registry.gather(), &mut buffer) {
-        eprintln!("could not encode custom metrics: {}", e);
+        eprintln!("could not encode custom metrics: {e}");
     };
     let res = match String::from_utf8(buffer.clone()) {
         Ok(v) => v,
         Err(e) => {
-            tracing::error!("custom metrics could not be from_utf8'd: {}", e);
+            tracing::error!("custom metrics could not be from_utf8'd: {e}");
             String::default()
         }
     };

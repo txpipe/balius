@@ -1,6 +1,6 @@
 [package]
 name = "balius"
-version = "0.3.4"
+version = "0.5.1"
 edition = "2021"
 
 description = "CLI for building Headless dApps on UTxO-based blockchains"
@@ -14,7 +14,7 @@ keywords = ["blockchain", "dapp", "sdk", "utxo", "cardano"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-balius-runtime = { version = "0.3.4", path = "../balius-runtime" }
+balius-runtime = { version = "0.5.1", path = "../balius-runtime" }
 miette = { version = "7.2.0", features = ["fancy"] }
 tokio = { version = "1.41.0", features = ["rt-multi-thread", "signal"] }
 tokio-util = "0.7.12"

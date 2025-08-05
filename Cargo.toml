@@ -8,7 +8,7 @@ members = [
     # "examples/ticket-vending-machine",
     "examples/minter/offchain",
     "examples/wallet/offchain",
-    "examples/asteria-admin",
+    # "examples/asteria-admin",
     "examples/telchar",
     "examples/comprehensive",
     "balius-sdk",
@@ -16,3 +16,17 @@ members = [
     "balius-macros",
     "baliusd",
 ]
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
+
+[workspace.dependencies]
+reqwest = { version = "0.12.22", default-features = false, features = [
+    "rustls-tls-webpki-roots",
+    "http2",
+    "charset",
+    "macos-system-configuration",
+] }
