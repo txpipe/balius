@@ -29,7 +29,6 @@ fn load_worker_config(config_path: Option<PathBuf>) -> miette::Result<serde_json
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
-    /// Turn debugging information on
     #[arg(short, long, action)]
     debug: bool,
 
