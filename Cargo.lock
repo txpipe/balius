@@ -227,7 +227,7 @@ dependencies = [
 
 [[package]]
 name = "balius"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "balius-runtime",
  "clap",
@@ -242,7 +242,7 @@ dependencies = [
 
 [[package]]
 name = "balius-macros"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "quote",
  "syn",
@@ -250,7 +250,7 @@ dependencies = [
 
 [[package]]
 name = "balius-runtime"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "async-trait",
  "chrono",
@@ -281,7 +281,7 @@ dependencies = [
 
 [[package]]
 name = "balius-sdk"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "balius-macros",
  "hex",
@@ -304,7 +304,7 @@ dependencies = [
 
 [[package]]
 name = "baliusd"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "balius-runtime",
  "clap",

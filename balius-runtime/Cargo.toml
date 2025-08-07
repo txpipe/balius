@@ -1,6 +1,6 @@
 [package]
 name = "balius-runtime"
-version = "0.5.1"
+version = "0.5.2"
 edition = "2021"
 
 description = "Runtime for run Headless dApps on UTxO-based blockchains"
