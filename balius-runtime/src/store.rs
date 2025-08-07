@@ -116,20 +116,22 @@ impl Store {
         let wx = new_db.begin_write()?;
 
         {
-            let source = rx.open_table(WAL)?;
-            let mut target = wx.open_table(WAL)?;
+            if let Ok(source) = rx.open_table(WAL) {
+                let mut target = wx.open_table(WAL)?;
 
-            for entry in source.iter()? {
-                let (k, v) = entry?;
-                target.insert(k.value(), v.value())?;
+                for entry in source.iter()? {
+                    let (k, v) = entry?;
+                    target.insert(k.value(), v.value())?;
+                }
             }
 
-            let source = rx.open_table(CURSORS)?;
-            let mut target = wx.open_table(CURSORS)?;
+            if let Ok(source) = rx.open_table(CURSORS) {
+                let mut target = wx.open_table(CURSORS)?;
 
-            for entry in source.iter()? {
-                let (k, v) = entry?;
-                target.insert(k.value(), v.value())?;
+                for entry in source.iter()? {
+                    let (k, v) = entry?;
+                    target.insert(k.value(), v.value())?;
+                }
             }
         }
 
