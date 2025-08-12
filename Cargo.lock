@@ -110,6 +110,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dde20b3d026af13f561bdd0f15edf01fc734f0dafcedbaf42bba506a9517f223"
 
 [[package]]
+name = "asteria-tracker"
+version = "0.0.1"
+dependencies = [
+ "balius-sdk 0.3.4",
+ "serde",
+]
+
+[[package]]
 name = "async-stream"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -242,6 +250,16 @@ dependencies = [
 
 [[package]]
 name = "balius-macros"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "995fceb18dd8036c17f8d616133f5f2cf93c17dd5123f7dd07dcbebf2ea86acb"
+dependencies = [
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "balius-macros"
 version = "0.5.2"
 dependencies = [
  "quote",
@@ -281,9 +299,31 @@ dependencies = [
 
 [[package]]
 name = "balius-sdk"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "258e9d00f2a7b551cf930812a865a0d3e1e87b508c96a121296c7d2774b0ba88"
+dependencies = [
+ "balius-macros 0.3.4",
+ "hex",
+ "pallas-addresses",
+ "pallas-codec",
+ "pallas-crypto",
+ "pallas-primitives",
+ "pallas-traverse",
+ "prost",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "thiserror 2.0.12",
+ "utxorpc-spec 0.16.0",
+ "wit-bindgen",
+]
+
+[[package]]
+name = "balius-sdk"
 version = "0.5.2"
 dependencies = [
- "balius-macros",
+ "balius-macros 0.5.2",
  "hex",
  "pallas-addresses",
  "pallas-codec",
@@ -511,7 +551,7 @@ checksum = "5b63caa9aa9397e2d9480a9b13673856c78d8ac123288526c37d7839f2a86990"
 name = "comprehensive"
 version = "0.1.0"
 dependencies = [
- "balius-sdk",
+ "balius-sdk 0.5.2",
  "hex",
  "serde",
  "serde_with",
@@ -1973,7 +2013,7 @@ dependencies = [
 name = "minter"
 version = "0.1.0"
 dependencies = [
- "balius-sdk",
+ "balius-sdk 0.5.2",
  "hex",
  "pallas-codec",
  "pallas-primitives",
@@ -2022,7 +2062,7 @@ checksum = "1d87ecb2933e8aeadb3e3a02b828fed80a7528047e68b4f424523a0981a3a084"
 name = "my-bod"
 version = "0.1.0"
 dependencies = [
- "balius-sdk",
+ "balius-sdk 0.5.2",
  "pallas-primitives",
  "serde",
 ]
@@ -3459,7 +3499,7 @@ checksum = "e502f78cdbb8ba4718f566c418c52bc729126ffd16baee5baa718cf25dd5a69a"
 name = "telchar"
 version = "0.1.0"
 dependencies = [
- "balius-sdk",
+ "balius-sdk 0.5.2",
  "hex",
  "pallas-primitives",
  "serde",
@@ -4092,7 +4132,7 @@ dependencies = [
 name = "wallet"
 version = "0.1.0"
 dependencies = [
- "balius-sdk",
+ "balius-sdk 0.5.2",
  "hex",
  "pallas-codec",
  "pallas-primitives",
