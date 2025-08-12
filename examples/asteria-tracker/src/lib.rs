@@ -88,13 +88,36 @@ fn handle_utxo(_: sdk::Config<SomeConfig>, utxo: sdk::Utxo<Datum>) -> sdk::Worke
     Ok(())
 }
 
+#[derive(Serialize, Deserialize)]
+struct KvGetParams {
+    key: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct KvGetResponse {
+    value: Option<String>,
+}
+
+fn kvget(
+    _: sdk::Config<SomeConfig>,
+    request: sdk::Params<KvGetParams>,
+) -> sdk::WorkerResult<sdk::Json<KvGetResponse>> {
+    Ok(sdk::Json(KvGetResponse {
+        value: worker::kv::get_value(&request.key)
+            .ok()
+            .map(|x| String::from_utf8(x).unwrap()),
+    }))
+}
+
 #[balius_sdk::main]
 fn main() -> Worker {
-    sdk::Worker::new().with_utxo_handler(
-        worker::driver::UtxoPattern {
-            address: None,
-            token: None,
-        },
-        sdk::FnHandler::from(handle_utxo),
-    )
+    sdk::Worker::new()
+        .with_utxo_handler(
+            worker::driver::UtxoPattern {
+                address: None,
+                token: None,
+            },
+            sdk::FnHandler::from(handle_utxo),
+        )
+        .with_request_handler("kvget", sdk::FnHandler::from(kvget))
 }
