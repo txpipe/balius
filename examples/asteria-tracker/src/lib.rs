@@ -43,13 +43,13 @@ struct UtxoHandlerResponse {
 #[derive(Serialize, Deserialize)]
 struct Datum {}
 
-const ASTERIA_ADDRESS: &str = "70b6c5e14f31af0c92515ce156625afc4749e30ceef178cfae1f929fff";
+const SPACETIME_ADDRESS: &str = "70b6c5e14f31af0c92515ce156625afc4749e30ceef178cfae1f929fff";
 const FUEL_POLICY: &str = "98b1c97b219c102dd0e9ba014481272d6ec069ec3ff47c63e291f1b7";
 
 fn handle_utxo(_: sdk::Config<SomeConfig>, utxo: sdk::Utxo<Datum>) -> sdk::WorkerResult<()> {
     let utxo_addr = hex::encode(utxo.utxo.address.into_bytes());
 
-    if utxo_addr == ASTERIA_ADDRESS {
+    if utxo_addr == SPACETIME_ADDRESS {
         // check how many FUEL we have (must traverse UTxO value)
         let mut fuel: u64 = 0;
         let massets = utxo.utxo.assets;
@@ -61,28 +61,34 @@ fn handle_utxo(_: sdk::Config<SomeConfig>, utxo: sdk::Utxo<Datum>) -> sdk::Worke
                 fuel = asset.output_coin;
             }
         }
-        let _ = worker::kv::set_value("fuel", fuel.to_string().as_bytes());
-    }
 
-    // manually parse datum
-    if let Some(datum) = utxo.utxo.datum {
-        let p = datum.payload.unwrap().plutus_data.unwrap();
+        // manually parse datum
+        if let Some(datum) = utxo.utxo.datum {
+            let p = datum.payload.unwrap().plutus_data.unwrap();
 
-        match p {
-            plutus_data::PlutusData::Constr(x) => {
-                let mut f = x.fields.iter();
+            match p {
+                plutus_data::PlutusData::Constr(x) => {
+                    let mut f = x.fields.iter();
 
-                if let Some(pos_x) = integer_plutus_field(f.next()) {
-                    let _ = worker::kv::set_value("pos_x", &pos_x.to_string().as_bytes());
-                };
-                if let Some(pos_y) = integer_plutus_field(f.next()) {
-                    let _ = worker::kv::set_value("pos_y", &pos_y.to_string().as_bytes());
+                    let pos_x = integer_plutus_field(f.next()).unwrap();
+                    let pos_y = integer_plutus_field(f.next()).unwrap();
+                    let asset_name = hex::encode(string_plutus_field(f.next()).unwrap());
+
+                    let _ = worker::kv::set_value(
+                        &format!("{asset_name}-pos_x"),
+                        pos_x.to_string().as_bytes(),
+                    );
+                    let _ = worker::kv::set_value(
+                        &format!("{asset_name}-pos_y"),
+                        pos_y.to_string().as_bytes(),
+                    );
+                    let _ = worker::kv::set_value(
+                        &format!("{asset_name}-fuel"),
+                        fuel.to_string().as_bytes(),
+                    );
                 }
-                if let Some(asset_name) = string_plutus_field(f.next()) {
-                    let _ = worker::kv::set_value("asset_name", &asset_name);
-                }
+                _ => {}
             }
-            _ => {}
         }
     }
     Ok(())
