@@ -23,15 +23,12 @@ fn string_plutus_field(p: Option<&PlutusData>) -> Option<Vec<u8>> {
 fn integer_plutus_field(p: Option<&PlutusData>) -> Option<i64> {
     match p {
         Some(x) => match x.plutus_data.clone() {
-            Some(plutus_data::PlutusData::BigInt(x)) => {
-                let bigint = x.big_int;
-                match bigint {
-                    Some(big_int::BigInt::Int(x)) => Some(x),
-                    Some(big_int::BigInt::BigUInt(_)) => None,
-                    Some(big_int::BigInt::BigNInt(_)) => None,
-                    _ => None,
-                }
-            }
+            Some(plutus_data::PlutusData::BigInt(x)) => match x.bigint {
+                Some(big_int::BigInt::Int(x)) => Some(x),
+                Some(big_int::BigInt::BigUInt(_)) => None,
+                Some(big_int::BigInt::BigNInt(_)) => None,
+                _ => None,
+            },
             _ => None,
         },
         _ => None,
