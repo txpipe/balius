@@ -44,7 +44,9 @@ async fn gather_blocks(
             utxorpc::TipEvent::Undo(chain_block) => {
                 undos.push(Block::Cardano(chain_block.parsed.unwrap()));
             }
-            utxorpc::TipEvent::Reset(_) => unreachable!(),
+            utxorpc::TipEvent::Reset(block_ref) => {
+                tracing::warn!(block_ref =? block_ref, "received reset event, reseting tip")
+            }
         }
     }
 }
