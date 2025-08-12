@@ -113,7 +113,8 @@ checksum = "dde20b3d026af13f561bdd0f15edf01fc734f0dafcedbaf42bba506a9517f223"
 name = "asteria-tracker"
 version = "0.0.1"
 dependencies = [
- "balius-sdk 0.3.4",
+ "balius-sdk 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hex",
  "serde",
  "utxorpc-spec 0.16.0",
 ]
@@ -251,9 +252,7 @@ dependencies = [
 
 [[package]]
 name = "balius-macros"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "995fceb18dd8036c17f8d616133f5f2cf93c17dd5123f7dd07dcbebf2ea86acb"
+version = "0.5.2"
 dependencies = [
  "quote",
  "syn",
@@ -262,6 +261,8 @@ dependencies = [
 [[package]]
 name = "balius-macros"
 version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1850261cea7908eaee4aa1abf57c945a492bcf75a4f63e704e8b6d729bc42ea"
 dependencies = [
  "quote",
  "syn",
@@ -300,11 +301,9 @@ dependencies = [
 
 [[package]]
 name = "balius-sdk"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "258e9d00f2a7b551cf930812a865a0d3e1e87b508c96a121296c7d2774b0ba88"
+version = "0.5.2"
 dependencies = [
- "balius-macros 0.3.4",
+ "balius-macros 0.5.2",
  "hex",
  "pallas-addresses",
  "pallas-codec",
@@ -316,6 +315,9 @@ dependencies = [
  "serde_json",
  "serde_with",
  "thiserror 2.0.12",
+ "tracing",
+ "tracing-subscriber",
+ "url",
  "utxorpc-spec 0.16.0",
  "wit-bindgen",
 ]
@@ -323,8 +325,10 @@ dependencies = [
 [[package]]
 name = "balius-sdk"
 version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e0802e18ba0d94115cfcc71c4e90bac912a295381bf52cf4ac9af7b55e2a29e4"
 dependencies = [
- "balius-macros 0.5.2",
+ "balius-macros 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "hex",
  "pallas-addresses",
  "pallas-codec",
