@@ -1,9 +1,10 @@
-use balius_sdk::http::AsHeader;
+use balius_sdk::http::{AsHeader, HttpRequest};
 use balius_sdk::wit::balius::app as worker;
 use balius_sdk::{self as sdk};
 use serde::{Deserialize, Serialize};
 use utxorpc_spec::utxorpc::v1alpha::cardano::plutus_data::{self};
 use utxorpc_spec::utxorpc::v1alpha::cardano::{big_int, PlutusData};
+use url::Url;
 
 #[derive(Serialize, Deserialize, Clone)]
 struct SomeConfig {
@@ -43,6 +44,7 @@ struct UtxoHandlerResponse {
 #[derive(Serialize, Deserialize)]
 struct Datum {}
 
+const BASE_URL: &str = "http://localhost:8080";
 const SPACETIME_ADDRESS: &str = "70b6c5e14f31af0c92515ce156625afc4749e30ceef178cfae1f929fff";
 const FUEL_POLICY: &str = "98b1c97b219c102dd0e9ba014481272d6ec069ec3ff47c63e291f1b7";
 
@@ -86,6 +88,14 @@ fn handle_utxo(_: sdk::Config<SomeConfig>, utxo: sdk::Utxo<Datum>) -> sdk::Worke
                         &format!("{asset_name}-fuel"),
                         fuel.to_string().as_bytes(),
                     );
+
+                    let pos_x_str = pos_x.to_string();
+                    let pos_y_str = pos_y.to_string();
+                    let fuel_str = fuel.to_string();
+
+                    let msg = &format!("{BASE_URL}/ship?name={asset_name}&x={pos_x_str}&y={pos_y_str}&fuel={fuel_str}");
+                    let url = Url::parse(msg).unwrap();
+                    let _ = HttpRequest::get(url).send();
                 }
                 _ => {}
             }

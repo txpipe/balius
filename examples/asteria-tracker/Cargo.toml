@@ -8,6 +8,7 @@ balius-sdk = "0.5.2"
 serde = { version = "1.0.204", features = ["derive"] }
 utxorpc-spec = "0.16.0"
 hex = "0.4.3"
+url = "2.5"
 
 [lib]
 crate-type = ["cdylib"]
