@@ -2,13 +2,17 @@ use balius_sdk::http::{AsHeader, HttpRequest};
 use balius_sdk::wit::balius::app as worker;
 use balius_sdk::{self as sdk};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
+use url::Url;
 use utxorpc_spec::utxorpc::v1alpha::cardano::plutus_data::{self};
 use utxorpc_spec::utxorpc::v1alpha::cardano::{big_int, PlutusData};
-use url::Url;
 
 #[derive(Serialize, Deserialize, Clone)]
 struct SomeConfig {
-    custom_hello: Option<String>,
+    discord_webhook: String,
+    spacetime_hex_address: String,
+    ship_policy: String,
+    fuel_policy: String,
 }
 
 fn string_plutus_field(p: Option<&PlutusData>) -> Option<Vec<u8>> {
@@ -37,22 +41,12 @@ fn integer_plutus_field(p: Option<&PlutusData>) -> Option<i64> {
 }
 
 #[derive(Serialize, Deserialize)]
-struct UtxoHandlerResponse {
-    msg: String,
-}
-
-#[derive(Serialize, Deserialize)]
 struct Datum {}
 
-const BASE_URL: &str = "http://localhost:8080";
-const SPACETIME_ADDRESS: &str = "70b6c5e14f31af0c92515ce156625afc4749e30ceef178cfae1f929fff";
-const SHIP_POLICY: &str = "b6c5e14f31af0c92515ce156625afc4749e30ceef178cfae1f929fff";
-const FUEL_POLICY: &str = "98b1c97b219c102dd0e9ba014481272d6ec069ec3ff47c63e291f1b7";
-
-fn handle_utxo(_: sdk::Config<SomeConfig>, utxo: sdk::Utxo<Datum>) -> sdk::WorkerResult<()> {
+fn handle_utxo(config: sdk::Config<SomeConfig>, utxo: sdk::Utxo<Datum>) -> sdk::WorkerResult<()> {
     let utxo_addr = hex::encode(utxo.utxo.address.into_bytes());
 
-    if utxo_addr == SPACETIME_ADDRESS {
+    if utxo_addr == config.spacetime_hex_address {
         // check UTxO validity and obtain fuel amount
         let mut is_valid: bool = false;
         let mut fuel: u64 = 0;
@@ -60,9 +54,9 @@ fn handle_utxo(_: sdk::Config<SomeConfig>, utxo: sdk::Utxo<Datum>) -> sdk::Worke
         for masset in &massets {
             // masset has type Multiasset (utxorpc_spec)
             let masset_policy = hex::encode(masset.policy_id.into_bytes());
-            if masset_policy == SHIP_POLICY {
+            if masset_policy == config.ship_policy {
                 is_valid = true;
-            } else if masset_policy == FUEL_POLICY {
+            } else if masset_policy == config.fuel_policy {
                 // asset has type Asset (utxorpc_spec)
                 let asset = masset.assets.first().unwrap();
                 fuel = asset.output_coin;
@@ -70,7 +64,7 @@ fn handle_utxo(_: sdk::Config<SomeConfig>, utxo: sdk::Utxo<Datum>) -> sdk::Worke
         }
 
         if !is_valid {
-            return Ok(())
+            return Ok(());
         }
 
         // manually parse datum to obtain ship name and position
@@ -97,24 +91,21 @@ fn handle_utxo(_: sdk::Config<SomeConfig>, utxo: sdk::Utxo<Datum>) -> sdk::Worke
         let pos_y_str = pos_y.to_string();
         let fuel_str = fuel.to_string();
 
-        let _ = worker::kv::set_value(
-            &format!("{asset_name}-pos_x"),
-            pos_x_str.as_bytes(),
-        );
-        let _ = worker::kv::set_value(
-            &format!("{asset_name}-pos_y"),
-            pos_y_str.as_bytes(),
-        );
-        let _ = worker::kv::set_value(
-            &format!("{asset_name}-fuel"),
-            fuel_str.as_bytes(),
-        );
+        let _ = worker::kv::set_value(&format!("{asset_name}-pos_x"), pos_x_str.as_bytes());
+        let _ = worker::kv::set_value(&format!("{asset_name}-pos_y"), pos_y_str.as_bytes());
+        let _ = worker::kv::set_value(&format!("{asset_name}-fuel"), fuel_str.as_bytes());
 
         // send notification
-        let msg = &format!("{BASE_URL}/ship?name={asset_name}&x={pos_x_str}&y={pos_y_str}&fuel={fuel_str}");
-        let url = Url::parse(msg).unwrap();
-        let _ = HttpRequest::get(url).send();
+        let url = Url::parse(&config.discord_webhook).unwrap();
+        let asset_name = String::from_utf8(hex::decode(asset_name).unwrap()).unwrap();
+        let payload = json!({
+            "content":
+                format!(
+                    "🚀 **{asset_name}** just moved!\n📍 Position: ({pos_x_str}, {pos_y_str})\n⛽ Fuel left: {fuel_str}"
+                )
+        });
 
+        let _ = HttpRequest::post(url).json(&payload)?.send()?;
     }
     Ok(())
 }
@@ -152,3 +143,4 @@ fn main() -> Worker {
         )
         .with_request_handler("kvget", sdk::FnHandler::from(kvget))
 }
+
