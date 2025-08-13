@@ -53,16 +53,17 @@ fn handle_utxo(_: sdk::Config<SomeConfig>, utxo: sdk::Utxo<Datum>) -> sdk::Worke
     let utxo_addr = hex::encode(utxo.utxo.address.into_bytes());
 
     if utxo_addr == SPACETIME_ADDRESS {
-        // check how many FUEL we have (must traverse UTxO value)
+        // check UTxO validity and obtain fuel amount
         let mut is_valid: bool = false;
         let mut fuel: u64 = 0;
         let massets = utxo.utxo.assets;
         for masset in &massets {
-            // masset has type Multiasset (https://docs.rs/utxorpc-spec/latest/utxorpc_spec/utxorpc/v1alpha/cardano/struct.Multiasset.html)
-            if hex::encode(masset.policy_id.into_bytes()) == SHIP_POLICY {
+            // masset has type Multiasset (utxorpc_spec)
+            let masset_policy = hex::encode(masset.policy_id.into_bytes());
+            if masset_policy == SHIP_POLICY {
                 is_valid = true;
-            } else if hex::encode(masset.policy_id.into_bytes()) == FUEL_POLICY {
-                // asset has type Asset (https://docs.rs/utxorpc-spec/latest/utxorpc_spec/utxorpc/v1alpha/cardano/struct.Asset.html)
+            } else if masset_policy == FUEL_POLICY {
+                // asset has type Asset (utxorpc_spec)
                 let asset = masset.assets.first().unwrap();
                 fuel = asset.output_coin;
             }
@@ -72,7 +73,10 @@ fn handle_utxo(_: sdk::Config<SomeConfig>, utxo: sdk::Utxo<Datum>) -> sdk::Worke
             return Ok(())
         }
 
-        // manually parse datum
+        // manually parse datum to obtain ship name and position
+        let mut pos_x = 0;
+        let mut pos_y = 0;
+        let mut asset_name = String::new();
         if let Some(datum) = utxo.utxo.datum {
             let p = datum.payload.unwrap().plutus_data.unwrap();
 
@@ -80,34 +84,37 @@ fn handle_utxo(_: sdk::Config<SomeConfig>, utxo: sdk::Utxo<Datum>) -> sdk::Worke
                 plutus_data::PlutusData::Constr(x) => {
                     let mut f = x.fields.iter();
 
-                    let pos_x = integer_plutus_field(f.next()).unwrap();
-                    let pos_y = integer_plutus_field(f.next()).unwrap();
-                    let asset_name = hex::encode(string_plutus_field(f.next()).unwrap());
-
-                    let _ = worker::kv::set_value(
-                        &format!("{asset_name}-pos_x"),
-                        pos_x.to_string().as_bytes(),
-                    );
-                    let _ = worker::kv::set_value(
-                        &format!("{asset_name}-pos_y"),
-                        pos_y.to_string().as_bytes(),
-                    );
-                    let _ = worker::kv::set_value(
-                        &format!("{asset_name}-fuel"),
-                        fuel.to_string().as_bytes(),
-                    );
-
-                    let pos_x_str = pos_x.to_string();
-                    let pos_y_str = pos_y.to_string();
-                    let fuel_str = fuel.to_string();
-
-                    let msg = &format!("{BASE_URL}/ship?name={asset_name}&x={pos_x_str}&y={pos_y_str}&fuel={fuel_str}");
-                    let url = Url::parse(msg).unwrap();
-                    let _ = HttpRequest::get(url).send();
+                    pos_x = integer_plutus_field(f.next()).unwrap();
+                    pos_y = integer_plutus_field(f.next()).unwrap();
+                    asset_name = hex::encode(string_plutus_field(f.next()).unwrap());
                 }
                 _ => {}
             }
         }
+
+        // save ship information in storage
+        let pos_x_str = pos_x.to_string();
+        let pos_y_str = pos_y.to_string();
+        let fuel_str = fuel.to_string();
+
+        let _ = worker::kv::set_value(
+            &format!("{asset_name}-pos_x"),
+            pos_x_str.as_bytes(),
+        );
+        let _ = worker::kv::set_value(
+            &format!("{asset_name}-pos_y"),
+            pos_y_str.as_bytes(),
+        );
+        let _ = worker::kv::set_value(
+            &format!("{asset_name}-fuel"),
+            fuel_str.as_bytes(),
+        );
+
+        // send notification
+        let msg = &format!("{BASE_URL}/ship?name={asset_name}&x={pos_x_str}&y={pos_y_str}&fuel={fuel_str}");
+        let url = Url::parse(msg).unwrap();
+        let _ = HttpRequest::get(url).send();
+
     }
     Ok(())
 }
