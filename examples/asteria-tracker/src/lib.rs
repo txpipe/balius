@@ -93,9 +93,8 @@ fn handle_utxo(config: sdk::Config<SomeConfig>, utxo: sdk::Utxo<Datum>) -> sdk::
         }
 
         // find out operation: create ship, move ship or gather fuel
-        let operation : Operation;
         let prev_fuel_res = worker::kv::get_value(&format!("{asset_name}-fuel"));
-        let _ = match prev_fuel_res {
+        let operation = match prev_fuel_res {
             Ok(prev_fuel_bytes) => {
                 // this is an existing ship
                 // did it move or gather fuel?
@@ -103,15 +102,15 @@ fn handle_utxo(config: sdk::Config<SomeConfig>, utxo: sdk::Utxo<Datum>) -> sdk::
                 let prev_fuel: u64 = prev_fuel_str.parse().unwrap();
                 if fuel < prev_fuel {
                     // it consumed fuel, so it moved
-                    operation = Operation::MoveShip;
+                    Operation::MoveShip
                 } else {
                     // it gathered fuel
-                    operation = Operation::GatherFuel;
+                    Operation::GatherFuel
                 }
             }
             Err(_err) => {
                 // this is a new ship (at least in the storage)
-                operation = Operation::CreateShip;
+                Operation::CreateShip
             }
         };
 
@@ -177,4 +176,3 @@ fn main() -> Worker {
         )
         .with_request_handler("kvget", sdk::FnHandler::from(kvget))
 }
-
