@@ -116,6 +116,8 @@ dependencies = [
  "balius-sdk 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "hex",
  "serde",
+ "serde_json",
+ "url",
  "utxorpc-spec 0.16.0",
 ]
 
