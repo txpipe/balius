@@ -46,6 +46,7 @@ struct Datum {}
 
 const BASE_URL: &str = "http://localhost:8080";
 const SPACETIME_ADDRESS: &str = "70b6c5e14f31af0c92515ce156625afc4749e30ceef178cfae1f929fff";
+const SHIP_POLICY: &str = "b6c5e14f31af0c92515ce156625afc4749e30ceef178cfae1f929fff";
 const FUEL_POLICY: &str = "98b1c97b219c102dd0e9ba014481272d6ec069ec3ff47c63e291f1b7";
 
 fn handle_utxo(_: sdk::Config<SomeConfig>, utxo: sdk::Utxo<Datum>) -> sdk::WorkerResult<()> {
@@ -53,15 +54,22 @@ fn handle_utxo(_: sdk::Config<SomeConfig>, utxo: sdk::Utxo<Datum>) -> sdk::Worke
 
     if utxo_addr == SPACETIME_ADDRESS {
         // check how many FUEL we have (must traverse UTxO value)
+        let mut is_valid: bool = false;
         let mut fuel: u64 = 0;
         let massets = utxo.utxo.assets;
         for masset in &massets {
             // masset has type Multiasset (https://docs.rs/utxorpc-spec/latest/utxorpc_spec/utxorpc/v1alpha/cardano/struct.Multiasset.html)
-            if hex::encode(masset.policy_id.into_bytes()) == FUEL_POLICY {
+            if hex::encode(masset.policy_id.into_bytes()) == SHIP_POLICY {
+                is_valid = true;
+            } else if hex::encode(masset.policy_id.into_bytes()) == FUEL_POLICY {
                 // asset has type Asset (https://docs.rs/utxorpc-spec/latest/utxorpc_spec/utxorpc/v1alpha/cardano/struct.Asset.html)
                 let asset = masset.assets.first().unwrap();
                 fuel = asset.output_coin;
             }
+        }
+
+        if !is_valid {
+            return Ok(())
         }
 
         // manually parse datum
