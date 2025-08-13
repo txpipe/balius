@@ -43,6 +43,12 @@ fn integer_plutus_field(p: Option<&PlutusData>) -> Option<i64> {
 #[derive(Serialize, Deserialize)]
 struct Datum {}
 
+enum Operation {
+    CreateShip,
+    MoveShip,
+    GatherFuel,
+}
+
 fn handle_utxo(config: sdk::Config<SomeConfig>, utxo: sdk::Utxo<Datum>) -> sdk::WorkerResult<()> {
     let utxo_addr = hex::encode(utxo.utxo.address.into_bytes());
 
@@ -86,6 +92,29 @@ fn handle_utxo(config: sdk::Config<SomeConfig>, utxo: sdk::Utxo<Datum>) -> sdk::
             }
         }
 
+        // find out operation: create ship, move ship or gather fuel
+        let operation : Operation;
+        let prev_fuel_res = worker::kv::get_value(&format!("{asset_name}-fuel"));
+        let _ = match prev_fuel_res {
+            Ok(prev_fuel_bytes) => {
+                // this is an existing ship
+                // did it move or gather fuel?
+                let prev_fuel_str: String = String::from_utf8(prev_fuel_bytes).unwrap();
+                let prev_fuel: u64 = prev_fuel_str.parse().unwrap();
+                if fuel < prev_fuel {
+                    // it consumed fuel, so it moved
+                    operation = Operation::MoveShip;
+                } else {
+                    // it gathered fuel
+                    operation = Operation::GatherFuel;
+                }
+            }
+            Err(_err) => {
+                // this is a new ship (at least in the storage)
+                operation = Operation::CreateShip;
+            }
+        };
+
         // save ship information in storage
         let pos_x_str = pos_x.to_string();
         let pos_y_str = pos_y.to_string();
@@ -98,10 +127,15 @@ fn handle_utxo(config: sdk::Config<SomeConfig>, utxo: sdk::Utxo<Datum>) -> sdk::
         // send notification
         let url = Url::parse(&config.discord_webhook).unwrap();
         let asset_name = String::from_utf8(hex::decode(asset_name).unwrap()).unwrap();
+        let header = match operation {
+            Operation::CreateShip => format!("🚀 new **{asset_name}** detected!"),
+            Operation::MoveShip => format!("🚀 **{asset_name}** just moved!"),
+            Operation::GatherFuel => format!("🚀 **{asset_name}** just gathered fuel!"),
+        };
         let payload = json!({
             "content":
                 format!(
-                    "🚀 **{asset_name}** just moved!\n📍 Position: ({pos_x_str}, {pos_y_str})\n⛽ Fuel left: {fuel_str}"
+                    "{header}\n📍 Position: ({pos_x_str}, {pos_y_str})\n⛽ Fuel left: {fuel_str}"
                 )
         });
 
