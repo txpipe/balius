@@ -8,7 +8,7 @@ use utxorpc_spec::utxorpc::v1alpha::cardano::plutus_data::{self};
 use utxorpc_spec::utxorpc::v1alpha::cardano::{big_int, PlutusData};
 
 #[derive(Serialize, Deserialize, Clone)]
-struct SomeConfig {
+struct Config {
     discord_webhook: String,
     spacetime_hex_address: String,
     ship_policy: String,
@@ -50,7 +50,7 @@ enum Operation {
     GatherFuel,
 }
 
-fn handle_utxo(config: sdk::Config<SomeConfig>, utxo: sdk::Utxo<Datum>) -> sdk::WorkerResult<()> {
+fn handle_utxo(config: sdk::Config<Config>, utxo: sdk::Utxo<Datum>) -> sdk::WorkerResult<()> {
     let tx_hash = hex::encode(utxo.tx_hash);
     let output_index = utxo.index;
     let out_ref = format!("{tx_hash}#{output_index}");
@@ -166,7 +166,7 @@ struct KvGetResponse {
 }
 
 fn kvget(
-    _: sdk::Config<SomeConfig>,
+    _: sdk::Config<Config>,
     request: sdk::Params<KvGetParams>,
 ) -> sdk::WorkerResult<sdk::Json<KvGetResponse>> {
     Ok(sdk::Json(KvGetResponse {
@@ -189,4 +189,3 @@ fn main() -> Worker {
         )
         .with_request_handler("kvget", sdk::FnHandler::from(kvget))
 }
-
