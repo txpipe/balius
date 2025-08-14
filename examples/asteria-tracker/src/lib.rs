@@ -43,6 +43,7 @@ fn integer_plutus_field(p: Option<&PlutusData>) -> Option<i64> {
 #[derive(Serialize, Deserialize)]
 struct Datum {}
 
+#[derive(Debug)]
 enum Operation {
     CreateShip,
     MoveShip,
@@ -50,6 +51,11 @@ enum Operation {
 }
 
 fn handle_utxo(config: sdk::Config<SomeConfig>, utxo: sdk::Utxo<Datum>) -> sdk::WorkerResult<()> {
+    let tx_hash = hex::encode(utxo.tx_hash);
+    let output_index = utxo.index;
+    let out_ref = format!("{tx_hash}#{output_index}");
+    worker::logging::log(worker::logging::Level::Info, "Handling UTxO", &out_ref);
+
     let utxo_addr = hex::encode(utxo.utxo.address.into_bytes());
 
     if utxo_addr == config.spacetime_hex_address {
@@ -70,6 +76,7 @@ fn handle_utxo(config: sdk::Config<SomeConfig>, utxo: sdk::Utxo<Datum>) -> sdk::
         }
 
         if !is_valid {
+            worker::logging::log(worker::logging::Level::Debug, "Invalid UTxO", &out_ref);
             return Ok(());
         }
 
@@ -137,6 +144,11 @@ fn handle_utxo(config: sdk::Config<SomeConfig>, utxo: sdk::Utxo<Datum>) -> sdk::
                     "{header}\n📍 Position: ({pos_x_str}, {pos_y_str})\n⛽ Fuel left: {fuel_str}"
                 )
         });
+        worker::logging::log(
+            worker::logging::Level::Debug,
+            &format!("UTxO {}:", &out_ref),
+            &format!("{:#?} - {pos_x_str} - {pos_y_str} - {fuel_str}", operation),
+        );
 
         let _ = HttpRequest::post(url).json(&payload)?.send()?;
     }
@@ -166,6 +178,7 @@ fn kvget(
 
 #[balius_sdk::main]
 fn main() -> Worker {
+    balius_sdk::logging::init();
     sdk::Worker::new()
         .with_utxo_handler(
             worker::driver::UtxoPattern {
@@ -176,3 +189,4 @@ fn main() -> Worker {
         )
         .with_request_handler("kvget", sdk::FnHandler::from(kvget))
 }
+
