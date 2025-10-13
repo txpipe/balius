@@ -231,8 +231,7 @@ impl StoreTrait for Store {
         Ok(super::AtomicUpdate::Redb(AtomicUpdate::new(wx, log_seq)))
     }
 
-    /// Return list of blocks to undo after receiving a reset response from chainsync.
-    pub fn handle_reset(&self, point: ChainPoint) -> Result<Vec<Block>, super::Error> {
+    async fn handle_reset(&self, point: ChainPoint) -> Result<Vec<Block>, super::Error> {
         let rx = self.db.begin_read()?;
         let table = rx.open_table(WAL)?;
 

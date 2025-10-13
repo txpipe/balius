@@ -61,6 +61,7 @@ pub trait StoreTrait {
     ) -> Result<LogSeq, Error>;
     async fn get_worker_cursor(&self, id: &str) -> Result<Option<LogSeq>, super::Error>;
     async fn start_atomic_update(&self, log_seq: LogSeq) -> Result<AtomicUpdate, super::Error>;
+    async fn handle_reset(&self, point: ChainPoint) -> Result<Vec<Block>, super::Error>;
 }
 
 #[async_trait::async_trait]
@@ -97,6 +98,13 @@ impl StoreTrait for Store {
         match self {
             Store::Redb(store) => store.start_atomic_update(log_seq).await,
             Store::Custom(store) => store.lock().await.start_atomic_update(log_seq).await,
+        }
+    }
+
+    async fn handle_reset(&self, point: ChainPoint) -> Result<Vec<Block>, super::Error> {
+        match self {
+            Store::Redb(store) => store.handle_reset(point).await,
+            Store::Custom(store) => store.lock().await.handle_reset(point).await,
         }
     }
 }
