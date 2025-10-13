@@ -47,19 +47,18 @@ impl RedbKv {
         let wx = new_db.begin_write()?;
 
         {
-            let source = rx
-                .open_table(Self::DEF)
-                .map_err(|e| Error::KvError(e.to_string()))?;
-            let mut target = wx
-                .open_table(Self::DEF)
-                .map_err(|e| Error::KvError(e.to_string()))?;
-
-            for entry in source.iter().map_err(|e| Error::KvError(e.to_string()))? {
-                let (k, v) = entry.map_err(|e| Error::KvError(e.to_string()))?;
-                target
-                    .insert(k.value(), v.value())
+            if let Ok(source) = rx.open_table(Self::DEF) {
+                let mut target = wx
+                    .open_table(Self::DEF)
                     .map_err(|e| Error::KvError(e.to_string()))?;
-            }
+
+                for entry in source.iter().map_err(|e| Error::KvError(e.to_string()))? {
+                    let (k, v) = entry.map_err(|e| Error::KvError(e.to_string()))?;
+                    target
+                        .insert(k.value(), v.value())
+                        .map_err(|e| Error::KvError(e.to_string()))?;
+                }
+            };
         }
 
         wx.commit().map_err(|e| Error::KvError(e.to_string()))?;

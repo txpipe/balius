@@ -6,6 +6,7 @@ members = [
     "examples/basic",
     # "examples/sundae-stop-loss-strategy",
     # "examples/ticket-vending-machine",
+    "examples/asteria-tracker",
     "examples/minter/offchain",
     "examples/wallet/offchain",
     # "examples/asteria-admin",

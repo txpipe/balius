@@ -1,8 +1,11 @@
 use std::path::PathBuf;
 
-use balius_runtime::{drivers, ledgers, store::redb::Store as RedbStore, Runtime, Store};
+use balius_runtime::{
+    drivers, ledgers, sign::in_memory::SignerKey, store::redb::Store as RedbStore, Runtime, Store,
+};
 use boilerplate::{init_meter_provider, metrics_server};
-use clap::Parser;
+use clap::{Parser, Subcommand};
+use config::SignerConfig;
 use miette::{Context as _, IntoDiagnostic as _};
 use prometheus::Registry;
 use tracing::info;
@@ -25,19 +28,34 @@ fn load_worker_config(config_path: Option<PathBuf>) -> miette::Result<serde_json
     }
 }
 
-#[derive(Debug, Parser)]
-struct Args {
-    // Run in debug mode
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+struct Cli {
     #[arg(short, long, action)]
     debug: bool,
+
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    GetPublicKey { worker: String, key: String },
 }
 
 #[tokio::main]
 async fn main() -> miette::Result<()> {
+    let cli = Cli::parse();
+    match cli.command {
+        Some(Commands::GetPublicKey { worker, key }) => get_public_key(worker, key).await,
+        None => daemon(cli.debug).await,
+    }
+}
+
+async fn daemon(debug: bool) -> miette::Result<()> {
     let config: config::Config = boilerplate::load_config(&None)
         .into_diagnostic()
         .context("loading config")?;
-    let args = Args::parse();
 
     let registry = Registry::new();
     init_meter_provider(registry.clone())?;
@@ -52,7 +70,7 @@ async fn main() -> miette::Result<()> {
             .context("opening in memory store")?,
     };
 
-    if args.debug {
+    if debug {
         info!("converting store into ephemeral for debug mode");
         store = store
             .into_ephemeral()
@@ -67,7 +85,7 @@ async fn main() -> miette::Result<()> {
 
     let mut kv: balius_runtime::kv::Kv = (&config).into();
 
-    if args.debug {
+    if debug {
         info!("converting kv into ephemeral for debug mode");
         kv = kv
             .into_ephemeral()
@@ -126,4 +144,24 @@ async fn main() -> miette::Result<()> {
     metrics_server.unwrap();
 
     Ok(())
+}
+
+async fn get_public_key(worker: String, key: String) -> miette::Result<()> {
+    let config: config::Config = boilerplate::load_config(&None)
+        .into_diagnostic()
+        .context("loading config")?;
+
+    if let Some(SignerConfig::Memory(cfg)) = &config.signing {
+        if let Some(keys) = &cfg.keys {
+            for item in keys {
+                if item.worker == worker && item.name == key {
+                    let signer_key: SignerKey = item.into();
+                    println!("{}", hex::encode(signer_key.public_key()));
+                    return Ok(());
+                }
+            }
+        }
+    }
+
+    miette::bail!("key not found for worker: key = {key}, worker = {worker}");
 }

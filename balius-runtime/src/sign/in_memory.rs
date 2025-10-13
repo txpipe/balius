@@ -73,13 +73,13 @@ impl From<ed25519::SecretKeyExtended> for SignerKey {
 }
 
 impl SignerKey {
-    fn sign_payload(&self, payload: wit::Payload) -> Result<wit::Signature, wit::SignError> {
+    pub fn sign_payload(&self, payload: wit::Payload) -> Result<wit::Signature, wit::SignError> {
         match self {
             Self::Ed25519(key) => Ok(key.sign_payload(payload)),
         }
     }
 
-    fn public_key(&self) -> Vec<u8> {
+    pub fn public_key(&self) -> Vec<u8> {
         match self {
             Self::Ed25519(key) => key.public_key(),
         }

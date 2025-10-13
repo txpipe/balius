@@ -23,6 +23,14 @@ which loads both the chain cursor store and key-value backend into ephemeral
 baliusd --debug
 ```
 
+You can also use the `get-public-key` subcommand to retrieve the public key for a given signing key:
+
+```bash
+baliusd get-public-key <worker> <key>
+```
+
+> **Note**: This subcommand only works with the in-memory signing interface (`[signing] type = "memory"`) and for keys that are explicitly defined in the signing keys section of the TOML configuration file.
+
 ## Configuration
 
 baliusd is configured using a TOML file (`baliusd.toml`). Configuration files are loaded in this order:
