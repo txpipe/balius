@@ -153,6 +153,20 @@ pub enum ChainPoint {
     Cardano(utxorpc::spec::sync::BlockRef),
 }
 
+impl ChainPoint {
+    pub fn slot(&self) -> BlockSlot {
+        match self {
+            Self::Cardano(point) => point.index,
+        }
+    }
+
+    pub fn hash(&self) -> BlockHash {
+        match self {
+            Self::Cardano(point) => point.hash.to_vec().as_slice().into(),
+        }
+    }
+}
+
 pub type LogSeq = u64;
 
 pub enum TxInput {
