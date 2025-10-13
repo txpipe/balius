@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use prost::Message;
 use redb::{ReadableTable as _, TableDefinition, WriteTransaction};
-use std::{path::Path, sync::Arc};
+use std::{collections::VecDeque, path::Path, sync::Arc};
 use tracing::warn;
 
 use crate::{Block, ChainPoint, Error};
@@ -229,5 +229,24 @@ impl Store {
         let lowest = cursors.iter().fold(None, |all, item| all.min(Some(*item)));
 
         Ok(lowest)
+    }
+
+    /// Return list of blocks to undo after receiving a reset response from chainsync.
+    pub fn handle_reset(&self, point: ChainPoint) -> Result<Vec<Block>, super::Error> {
+        let rx = self.db.begin_read()?;
+        let table = rx.open_table(WAL)?;
+
+        let mut undos = VecDeque::new();
+        for result in table.iter()?.rev() {
+            let (_, v) = result?;
+            let block = v.value().next_block.clone();
+            let decoded = Block::from_bytes(&block);
+            if decoded.slot() <= point.slot() {
+                break;
+            } else {
+                undos.push_front(decoded);
+            }
+        }
+        Ok(undos.into())
     }
 }
