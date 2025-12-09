@@ -5,7 +5,7 @@ use router::Router;
 use sign::SignerHost;
 use std::{collections::HashMap, io::Read, path::Path, sync::Arc};
 use thiserror::Error;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, warn};
 use utxorpc::spec::sync::BlockRef;
 use wasmtime::component::HasSelf;
@@ -485,13 +485,13 @@ impl LoadedWorker {
     }
 }
 
-type WorkerMap = HashMap<String, LoadedWorker>;
+type WorkerMap = HashMap<String, Mutex<LoadedWorker>>;
 
 #[derive(Clone)]
 pub struct Runtime {
     engine: wasmtime::Engine,
     linker: wasmtime::component::Linker<WorkerState>,
-    loaded: Arc<Mutex<WorkerMap>>,
+    loaded: Arc<RwLock<WorkerMap>>,
 
     store: store::Store,
     ledger: Option<ledgers::Ledger>,
@@ -510,13 +510,15 @@ impl Runtime {
     }
 
     pub async fn chain_cursor(&self) -> Result<Option<ChainPoint>, Error> {
-        let lowest_seq = self
-            .loaded
-            .lock()
-            .await
-            .values()
-            .flat_map(|w| w.cursor)
-            .min();
+        let mut lowest_seq = None;
+        for w in self.loaded.read().await.values() {
+            if let Some(cursor) = w.lock().await.cursor {
+                lowest_seq = match lowest_seq {
+                    Some(prev) => Some(std::cmp::min(prev, cursor)),
+                    None => Some(cursor),
+                };
+            }
+        }
 
         if let Some(seq) = lowest_seq {
             debug!(lowest_seq, "found lowest seq");
@@ -569,14 +571,14 @@ impl Runtime {
         let cursor = self.store.get_worker_cursor(id)?;
         debug!(cursor, id, "found cursor for worker");
 
-        self.loaded.lock().await.insert(
+        self.loaded.write().await.insert(
             id.to_owned(),
-            LoadedWorker {
+            Mutex::new(LoadedWorker {
                 wasm_store,
                 instance,
                 cursor,
                 metrics: self.metrics.clone(),
-            },
+            }),
         );
 
         Ok(())
@@ -610,7 +612,7 @@ impl Runtime {
     }
 
     pub async fn remove_worker(&self, id: &str) -> Result<(), Error> {
-        match self.loaded.lock().await.remove(id) {
+        match self.loaded.write().await.remove(id) {
             Some(_) => {
                 info!(worker = id, "Successfully removed worker from runtime.")
             }
@@ -631,13 +633,14 @@ impl Runtime {
 
         let log_seq = self.store.write_ahead(undo_blocks, next_block)?;
 
-        let mut workers = self.loaded.lock().await;
+        let workers = self.loaded.read().await;
 
         let mut store_update = self.store.start_atomic_update(log_seq)?;
 
-        for (_, worker) in workers.iter_mut() {
-            worker.apply_chain(undo_blocks, next_block).await?;
-            store_update.update_worker_cursor(&worker.wasm_store.data().worker_id)?;
+        for (_, worker) in workers.iter() {
+            let mut lock = worker.lock().await;
+            lock.apply_chain(undo_blocks, next_block).await?;
+            store_update.update_worker_cursor(&lock.wasm_store.data().worker_id)?;
         }
 
         store_update.commit()?;
@@ -651,11 +654,12 @@ impl Runtime {
         method: &str,
         params: Vec<u8>,
     ) -> Result<wit::Response, Error> {
-        let mut lock = self.loaded.lock().await;
-
-        let worker = lock
-            .get_mut(worker_id)
-            .ok_or(Error::WorkerNotFound(worker_id.to_string()))?;
+        let workers = self.loaded.read().await;
+        let mut worker = workers
+            .get(worker_id)
+            .ok_or(Error::WorkerNotFound(worker_id.to_string()))?
+            .lock()
+            .await;
 
         let channel = worker
             .wasm_store
