@@ -156,7 +156,7 @@ pub enum ChainPoint {
 impl ChainPoint {
     pub fn slot(&self) -> BlockSlot {
         match self {
-            Self::Cardano(point) => point.index,
+            Self::Cardano(point) => point.slot,
         }
     }
 
@@ -281,8 +281,9 @@ impl Block {
     pub fn chain_point(&self) -> ChainPoint {
         match self {
             Self::Cardano(block) => ChainPoint::Cardano(BlockRef {
-                index: block.header.as_ref().unwrap().slot,
+                slot: block.header.as_ref().unwrap().slot,
                 hash: block.header.as_ref().unwrap().hash.clone(),
+                height: block.header.as_ref().unwrap().height,
             }),
         }
     }
