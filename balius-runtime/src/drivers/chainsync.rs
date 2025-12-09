@@ -44,16 +44,19 @@ async fn gather_blocks(
         let event = tip.event().await?;
 
         match event {
-            utxorpc::TipEvent::Apply(chain_block) => {
+            Some(utxorpc::TipEvent::Apply(chain_block)) => {
                 let next = Block::Cardano(chain_block.parsed.unwrap());
                 break Ok((next, undos));
             }
-            utxorpc::TipEvent::Undo(chain_block) => {
+            Some(utxorpc::TipEvent::Undo(chain_block)) => {
                 undos.push(Block::Cardano(chain_block.parsed.unwrap()));
             }
-            utxorpc::TipEvent::Reset(block_ref) => {
+            Some(utxorpc::TipEvent::Reset(block_ref)) => {
                 tracing::warn!(block_ref =? &block_ref, "received reset event, reseting tip");
                 undos = store.handle_reset(block_ref.into()).await?;
+            }
+            None => {
+                tracing::warn!("Received None response from follow_tip, skipping")
             }
         }
     }
@@ -96,9 +99,9 @@ pub async fn run(
 
     // confirm first event is a reset to the requested chain point
     match tip.event().await? {
-        utxorpc::TipEvent::Reset(point) => {
+        Some(utxorpc::TipEvent::Reset(point)) => {
             warn!(
-                slot = point.index,
+                slot = point.slot,
                 "TODO: check that reset is to the requested chain point"
             );
         }
