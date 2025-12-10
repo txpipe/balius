@@ -639,12 +639,6 @@ impl Runtime {
 
         let mut store_update = self.store.start_atomic_update(log_seq)?;
 
-        for (_, worker) in workers.iter() {
-            let mut lock = worker.lock().await;
-            lock.apply_chain(undo_blocks, next_block).await?;
-            store_update.update_worker_cursor(&lock.wasm_store.data().worker_id)?;
-        }
-
         let update = async |worker: &Mutex<LoadedWorker>| -> Result<String, Error> {
             let mut lock = worker.lock().await;
             lock.apply_chain(undo_blocks, next_block).await?;
