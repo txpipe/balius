@@ -1,3 +1,5 @@
+use futures::future::join_all;
+use itertools::Itertools;
 use kv::KvHost;
 use ledgers::LedgerHost;
 use logging::LoggerHost;
@@ -642,6 +644,21 @@ impl Runtime {
             lock.apply_chain(undo_blocks, next_block).await?;
             store_update.update_worker_cursor(&lock.wasm_store.data().worker_id)?;
         }
+
+        let update = async |worker: &Mutex<LoadedWorker>| -> Result<String, Error> {
+            let mut lock = worker.lock().await;
+            lock.apply_chain(undo_blocks, next_block).await?;
+
+            Ok(lock.wasm_store.data().worker_id.clone())
+        };
+        let updates = workers.values().map(update).collect_vec();
+
+        join_all(updates)
+            .await
+            .into_iter()
+            .collect::<Result<Vec<String>, _>>()?
+            .iter()
+            .try_for_each(|x| store_update.update_worker_cursor(x))?;
 
         store_update.commit()?;
 
