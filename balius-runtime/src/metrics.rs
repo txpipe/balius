@@ -108,7 +108,7 @@ impl Metrics {
             .with_description("Duration to process handle_chain in milliseconds.")
             .with_unit("ms")
             .with_boundaries(vec![
-                1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0,
+                100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0, 25000.0, 60000.0, 1200000.0,
             ])
             .build();
 
@@ -117,7 +117,7 @@ impl Metrics {
             .with_description("Duration to process handle_request in milliseconds.")
             .with_unit("ms")
             .with_boundaries(vec![
-                1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0,
+                100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0, 25000.0, 60000.0, 1200000.0,
             ])
             .build();
 
@@ -126,7 +126,7 @@ impl Metrics {
             .with_description("Duration for a worker to process apply_chain in milliseconds.")
             .with_unit("ms")
             .with_boundaries(vec![
-                1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0,
+                100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0, 25000.0, 60000.0, 1200000.0,
             ])
             .build();
 
