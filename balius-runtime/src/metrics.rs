@@ -1,4 +1,8 @@
-use opentelemetry::{global, metrics::Counter, KeyValue};
+use opentelemetry::{
+    global,
+    metrics::{Counter, Gauge, Histogram},
+    KeyValue,
+};
 
 use crate::{logging::level_to_string, wit::balius::app::logging::Level};
 
@@ -17,6 +21,12 @@ pub struct Metrics {
     ledger_read_utxos: Counter<u64>,
     ledger_search_utxos: Counter<u64>,
     ledger_read_params: Counter<u64>,
+    workers_loaded: Gauge<u64>,
+    handle_chain_duration_ms: Histogram<f64>,
+    handle_request_duration_ms: Histogram<f64>,
+    handle_worker_chain_duration_ms: Histogram<f64>,
+    latest_block_height: Gauge<u64>,
+    latest_block_slot: Gauge<u64>,
 }
 
 impl Metrics {
@@ -88,6 +98,48 @@ impl Metrics {
             .with_description("Amount of calls to read_params on the ledger interface.")
             .build();
 
+        let workers_loaded = meter
+            .u64_gauge("workers_loaded")
+            .with_description("Current amount of workers loaded into the runtime.")
+            .build();
+
+        let handle_chain_duration_ms = meter
+            .f64_histogram("handle_chain_duration_ms")
+            .with_description("Duration to process handle_chain in milliseconds.")
+            .with_unit("ms")
+            .with_boundaries(vec![
+                100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0, 25000.0, 60000.0, 1200000.0,
+            ])
+            .build();
+
+        let handle_request_duration_ms = meter
+            .f64_histogram("handle_request_duration_ms")
+            .with_description("Duration to process handle_request in milliseconds.")
+            .with_unit("ms")
+            .with_boundaries(vec![
+                100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0, 25000.0, 60000.0, 1200000.0,
+            ])
+            .build();
+
+        let handle_worker_chain_duration_ms = meter
+            .f64_histogram("handle_worker_chain_duration_ms")
+            .with_description("Duration for a worker to process apply_chain in milliseconds.")
+            .with_unit("ms")
+            .with_boundaries(vec![
+                100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0, 25000.0, 60000.0, 1200000.0,
+            ])
+            .build();
+
+        let latest_block_height = meter
+            .u64_gauge("latest_block_height")
+            .with_description("Latest block height successfully processed by handle_chain.")
+            .build();
+
+        let latest_block_slot = meter
+            .u64_gauge("latest_block_slot")
+            .with_description("Latest block slot successfully processed by handle_chain.")
+            .build();
+
         Metrics {
             requests,
             kv_get,
@@ -102,6 +154,12 @@ impl Metrics {
             ledger_read_utxos,
             ledger_search_utxos,
             ledger_read_params,
+            workers_loaded,
+            handle_chain_duration_ms,
+            handle_request_duration_ms,
+            handle_worker_chain_duration_ms,
+            latest_block_height,
+            latest_block_slot,
         }
     }
 
@@ -179,6 +237,39 @@ impl Metrics {
     pub fn ledger_read_params(&self, worker_id: &str) {
         self.ledger_read_params
             .add(1, &[KeyValue::new("worker", worker_id.to_owned())]);
+    }
+
+    pub fn workers_loaded(&self, count: u64) {
+        self.workers_loaded.record(count, &[]);
+    }
+
+    pub fn handle_chain_duration_ms(&self, duration_ms: f64) {
+        self.handle_chain_duration_ms.record(duration_ms, &[]);
+    }
+
+    pub fn handle_request_duration_ms(&self, worker_id: &str, method: &str, duration_ms: f64) {
+        self.handle_request_duration_ms.record(
+            duration_ms,
+            &[
+                KeyValue::new("worker", worker_id.to_owned()),
+                KeyValue::new("method", method.to_owned()),
+            ],
+        );
+    }
+
+    pub fn latest_block_height(&self, height: u64) {
+        self.latest_block_height.record(height, &[]);
+    }
+
+    pub fn latest_block_slot(&self, slot: u64) {
+        self.latest_block_slot.record(slot, &[]);
+    }
+
+    pub fn handle_worker_chain_duration_ms(&self, worker_id: &str, duration_ms: f64) {
+        self.handle_worker_chain_duration_ms.record(
+            duration_ms,
+            &[KeyValue::new("worker", worker_id.to_owned())],
+        );
     }
 }
 
