@@ -3,7 +3,7 @@ use ledgers::LedgerHost;
 use logging::LoggerHost;
 use router::Router;
 use sign::SignerHost;
-use std::{collections::HashMap, io::Read, path::Path, sync::Arc};
+use std::{collections::HashMap, io::Read, path::Path, sync::Arc, time::Instant};
 use thiserror::Error;
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
@@ -569,7 +569,8 @@ impl Runtime {
         let cursor = self.store.get_worker_cursor(id)?;
         debug!(cursor, id, "found cursor for worker");
 
-        self.loaded.lock().await.insert(
+        let mut loaded = self.loaded.lock().await;
+        loaded.insert(
             id.to_owned(),
             LoadedWorker {
                 wasm_store,
@@ -578,6 +579,8 @@ impl Runtime {
                 metrics: self.metrics.clone(),
             },
         );
+
+        self.metrics.workers_loaded(loaded.len() as u64);
 
         Ok(())
     }
@@ -610,7 +613,12 @@ impl Runtime {
     }
 
     pub async fn remove_worker(&self, id: &str) -> Result<(), Error> {
-        match self.loaded.lock().await.remove(id) {
+        let mut loaded = self.loaded.lock().await;
+        let removed = loaded.remove(id);
+
+        self.metrics.workers_loaded(loaded.len() as u64);
+
+        match removed {
             Some(_) => {
                 info!(worker = id, "Successfully removed worker from runtime.")
             }
@@ -627,6 +635,7 @@ impl Runtime {
         undo_blocks: &Vec<Block>,
         next_block: &Block,
     ) -> Result<(), Error> {
+        let start = Instant::now();
         info!("applying block");
 
         let log_seq = self.store.write_ahead(undo_blocks, next_block)?;
@@ -636,11 +645,22 @@ impl Runtime {
         let mut store_update = self.store.start_atomic_update(log_seq)?;
 
         for (_, worker) in workers.iter_mut() {
+            let worker_start = Instant::now();
             worker.apply_chain(undo_blocks, next_block).await?;
+            self.metrics.handle_worker_chain_duration_ms(
+                &worker.wasm_store.data().worker_id,
+                worker_start.elapsed().as_secs_f64() * 1000.0,
+            );
+
             store_update.update_worker_cursor(&worker.wasm_store.data().worker_id)?;
         }
 
         store_update.commit()?;
+
+        self.metrics
+            .handle_chain_duration_ms(start.elapsed().as_secs_f64() * 1000.0);
+        self.metrics.latest_block_height(next_block.height());
+        self.metrics.latest_block_slot(next_block.slot());
 
         Ok(())
     }
@@ -651,6 +671,7 @@ impl Runtime {
         method: &str,
         params: Vec<u8>,
     ) -> Result<wit::Response, Error> {
+        let start = Instant::now();
         let mut lock = self.loaded.lock().await;
 
         let worker = lock
@@ -667,6 +688,9 @@ impl Runtime {
 
         let result = worker.dispatch_event(channel, &evt).await;
         self.metrics.request(worker_id, method, result.is_ok());
+        let duration_ms = start.elapsed().as_secs_f64() * 1000.0;
+        self.metrics
+            .handle_request_duration_ms(worker_id, method, duration_ms);
         result
     }
 }
@@ -802,8 +826,11 @@ impl RuntimeBuilder {
             http,
         } = this;
 
+        let metrics: Arc<metrics::Metrics> = Default::default();
+        metrics.workers_loaded(0);
+
         Ok(Runtime {
-            metrics: Default::default(),
+            metrics,
             loaded: Default::default(),
             engine,
             linker,
