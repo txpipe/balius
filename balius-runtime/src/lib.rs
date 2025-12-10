@@ -5,7 +5,7 @@ use ledgers::LedgerHost;
 use logging::LoggerHost;
 use router::Router;
 use sign::SignerHost;
-use std::{collections::HashMap, io::Read, path::Path, sync::Arc};
+use std::{collections::HashMap, io::Read, path::Path, sync::Arc, time::Instant};
 use thiserror::Error;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, warn};
@@ -574,7 +574,8 @@ impl Runtime {
         let cursor = self.store.get_worker_cursor(id)?;
         debug!(cursor, id, "found cursor for worker");
 
-        self.loaded.write().await.insert(
+        let mut loaded = self.loaded.write().await;
+        loaded.insert(
             id.to_owned(),
             Mutex::new(LoadedWorker {
                 wasm_store,
@@ -583,6 +584,8 @@ impl Runtime {
                 metrics: self.metrics.clone(),
             }),
         );
+
+        self.metrics.workers_loaded(loaded.len() as u64);
 
         Ok(())
     }
@@ -615,7 +618,12 @@ impl Runtime {
     }
 
     pub async fn remove_worker(&self, id: &str) -> Result<(), Error> {
-        match self.loaded.write().await.remove(id) {
+        let mut loaded = self.loaded.write().await;
+        let removed = loaded.remove(id);
+
+        self.metrics.workers_loaded(loaded.len() as u64);
+
+        match removed {
             Some(_) => {
                 info!(worker = id, "Successfully removed worker from runtime.")
             }
@@ -632,6 +640,7 @@ impl Runtime {
         undo_blocks: &Vec<Block>,
         next_block: &Block,
     ) -> Result<(), Error> {
+        let start = Instant::now();
         info!("applying block");
 
         let log_seq = self.store.write_ahead(undo_blocks, next_block)?;
@@ -640,22 +649,34 @@ impl Runtime {
 
         let mut store_update = self.store.start_atomic_update(log_seq)?;
 
-        let update = async |worker: &Mutex<LoadedWorker>| -> Result<String, Error> {
+        let update = async |worker: &Mutex<LoadedWorker>| -> Result<(String, f64), Error> {
+            let worker_start = Instant::now();
             let mut lock = worker.lock().await;
             lock.apply_chain(undo_blocks, next_block).await?;
 
-            Ok(lock.wasm_store.data().worker_id.clone())
+            Ok((
+                lock.wasm_store.data().worker_id.clone(),
+                worker_start.elapsed().as_secs_f64() * 1000.0,
+            ))
         };
         let updates = workers.values().map(update).collect_vec();
 
         join_all(updates)
             .await
             .into_iter()
-            .collect::<Result<Vec<String>, _>>()?
+            .collect::<Result<Vec<(String, f64)>, _>>()?
             .iter()
-            .try_for_each(|x| store_update.update_worker_cursor(x))?;
+            .try_for_each(|(x, duration)| {
+                self.metrics.handle_worker_chain_duration_ms(x, *duration);
+                store_update.update_worker_cursor(x)
+            })?;
 
         store_update.commit()?;
+
+        self.metrics
+            .handle_chain_duration_ms(start.elapsed().as_secs_f64() * 1000.0);
+        self.metrics.latest_block_height(next_block.height());
+        self.metrics.latest_block_slot(next_block.slot());
 
         Ok(())
     }
@@ -666,6 +687,7 @@ impl Runtime {
         method: &str,
         params: Vec<u8>,
     ) -> Result<wit::Response, Error> {
+        let start = Instant::now();
         let workers = self.loaded.read().await;
         let mut worker = workers
             .get(worker_id)
@@ -683,6 +705,9 @@ impl Runtime {
 
         let result = worker.dispatch_event(channel, &evt).await;
         self.metrics.request(worker_id, method, result.is_ok());
+        let duration_ms = start.elapsed().as_secs_f64() * 1000.0;
+        self.metrics
+            .handle_request_duration_ms(worker_id, method, duration_ms);
         result
     }
 }
@@ -818,8 +843,11 @@ impl RuntimeBuilder {
             http,
         } = this;
 
+        let metrics: Arc<metrics::Metrics> = Default::default();
+        metrics.workers_loaded(0);
+
         Ok(Runtime {
-            metrics: Default::default(),
+            metrics,
             loaded: Default::default(),
             engine,
             linker,
