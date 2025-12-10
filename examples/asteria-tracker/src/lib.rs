@@ -87,15 +87,12 @@ fn handle_utxo(config: sdk::Config<Config>, utxo: sdk::Utxo<Datum>) -> sdk::Work
         if let Some(datum) = utxo.utxo.datum {
             let p = datum.payload.unwrap().plutus_data.unwrap();
 
-            match p {
-                plutus_data::PlutusData::Constr(x) => {
-                    let mut f = x.fields.iter();
+            if let plutus_data::PlutusData::Constr(x) = p {
+                let mut f = x.fields.iter();
 
-                    pos_x = integer_plutus_field(f.next()).unwrap();
-                    pos_y = integer_plutus_field(f.next()).unwrap();
-                    asset_name = hex::encode(string_plutus_field(f.next()).unwrap());
-                }
-                _ => {}
+                pos_x = integer_plutus_field(f.next()).unwrap();
+                pos_y = integer_plutus_field(f.next()).unwrap();
+                asset_name = hex::encode(string_plutus_field(f.next()).unwrap());
             }
         }
 

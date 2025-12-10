@@ -1,3 +1,5 @@
+use futures::future::join_all;
+use itertools::Itertools;
 use kv::KvHost;
 use ledgers::LedgerHost;
 use logging::LoggerHost;
@@ -5,7 +7,7 @@ use router::Router;
 use sign::SignerHost;
 use std::{collections::HashMap, io::Read, path::Path, sync::Arc, time::Instant};
 use thiserror::Error;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, warn};
 use utxorpc::spec::sync::BlockRef;
 use wasmtime::component::HasSelf;
@@ -156,7 +158,7 @@ pub enum ChainPoint {
 impl ChainPoint {
     pub fn slot(&self) -> BlockSlot {
         match self {
-            Self::Cardano(point) => point.index,
+            Self::Cardano(point) => point.slot,
         }
     }
 
@@ -281,8 +283,9 @@ impl Block {
     pub fn chain_point(&self) -> ChainPoint {
         match self {
             Self::Cardano(block) => ChainPoint::Cardano(BlockRef {
-                index: block.header.as_ref().unwrap().slot,
+                slot: block.header.as_ref().unwrap().slot,
                 hash: block.header.as_ref().unwrap().hash.clone(),
+                height: block.header.as_ref().unwrap().height,
             }),
         }
     }
@@ -485,13 +488,13 @@ impl LoadedWorker {
     }
 }
 
-type WorkerMap = HashMap<String, LoadedWorker>;
+type WorkerMap = HashMap<String, Mutex<LoadedWorker>>;
 
 #[derive(Clone)]
 pub struct Runtime {
     engine: wasmtime::Engine,
     linker: wasmtime::component::Linker<WorkerState>,
-    loaded: Arc<Mutex<WorkerMap>>,
+    loaded: Arc<RwLock<WorkerMap>>,
 
     store: store::Store,
     ledger: Option<ledgers::Ledger>,
@@ -510,13 +513,15 @@ impl Runtime {
     }
 
     pub async fn chain_cursor(&self) -> Result<Option<ChainPoint>, Error> {
-        let lowest_seq = self
-            .loaded
-            .lock()
-            .await
-            .values()
-            .flat_map(|w| w.cursor)
-            .min();
+        let mut lowest_seq = None;
+        for w in self.loaded.read().await.values() {
+            if let Some(cursor) = w.lock().await.cursor {
+                lowest_seq = match lowest_seq {
+                    Some(prev) => Some(std::cmp::min(prev, cursor)),
+                    None => Some(cursor),
+                };
+            }
+        }
 
         if let Some(seq) = lowest_seq {
             debug!(lowest_seq, "found lowest seq");
@@ -569,15 +574,15 @@ impl Runtime {
         let cursor = self.store.get_worker_cursor(id)?;
         debug!(cursor, id, "found cursor for worker");
 
-        let mut loaded = self.loaded.lock().await;
+        let mut loaded = self.loaded.write().await;
         loaded.insert(
             id.to_owned(),
-            LoadedWorker {
+            Mutex::new(LoadedWorker {
                 wasm_store,
                 instance,
                 cursor,
                 metrics: self.metrics.clone(),
-            },
+            }),
         );
 
         self.metrics.workers_loaded(loaded.len() as u64);
@@ -613,7 +618,7 @@ impl Runtime {
     }
 
     pub async fn remove_worker(&self, id: &str) -> Result<(), Error> {
-        let mut loaded = self.loaded.lock().await;
+        let mut loaded = self.loaded.write().await;
         let removed = loaded.remove(id);
 
         self.metrics.workers_loaded(loaded.len() as u64);
@@ -640,20 +645,31 @@ impl Runtime {
 
         let log_seq = self.store.write_ahead(undo_blocks, next_block)?;
 
-        let mut workers = self.loaded.lock().await;
+        let workers = self.loaded.read().await;
 
         let mut store_update = self.store.start_atomic_update(log_seq)?;
 
-        for (_, worker) in workers.iter_mut() {
+        let update = async |worker: &Mutex<LoadedWorker>| -> Result<(String, f64), Error> {
             let worker_start = Instant::now();
-            worker.apply_chain(undo_blocks, next_block).await?;
-            self.metrics.handle_worker_chain_duration_ms(
-                &worker.wasm_store.data().worker_id,
-                worker_start.elapsed().as_secs_f64() * 1000.0,
-            );
+            let mut lock = worker.lock().await;
+            lock.apply_chain(undo_blocks, next_block).await?;
 
-            store_update.update_worker_cursor(&worker.wasm_store.data().worker_id)?;
-        }
+            Ok((
+                lock.wasm_store.data().worker_id.clone(),
+                worker_start.elapsed().as_secs_f64() * 1000.0,
+            ))
+        };
+        let updates = workers.values().map(update).collect_vec();
+
+        join_all(updates)
+            .await
+            .into_iter()
+            .collect::<Result<Vec<(String, f64)>, _>>()?
+            .iter()
+            .try_for_each(|(x, duration)| {
+                self.metrics.handle_worker_chain_duration_ms(x, *duration);
+                store_update.update_worker_cursor(x)
+            })?;
 
         store_update.commit()?;
 
@@ -672,11 +688,12 @@ impl Runtime {
         params: Vec<u8>,
     ) -> Result<wit::Response, Error> {
         let start = Instant::now();
-        let mut lock = self.loaded.lock().await;
-
-        let worker = lock
-            .get_mut(worker_id)
-            .ok_or(Error::WorkerNotFound(worker_id.to_string()))?;
+        let workers = self.loaded.read().await;
+        let mut worker = workers
+            .get(worker_id)
+            .ok_or(Error::WorkerNotFound(worker_id.to_string()))?
+            .lock()
+            .await;
 
         let channel = worker
             .wasm_store

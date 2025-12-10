@@ -23,7 +23,7 @@ tracing = "0.1.40"
 hex = "0.4.3"
 itertools = "0.14.0"
 async-trait = "0.1.83"
-utxorpc = { version = "0.10.0" }
+utxorpc = { version = "0.12.0" }
 # utxorpc = { path = "../../../utxorpc/rust-sdk" }
 tokio-util = "0.7.12"
 prost = "0.13"
@@ -32,6 +32,7 @@ url = "2.5.4"
 reqwest = { workspace = true }
 opentelemetry = { version = "0.29.1", features = ["metrics", "trace"] }
 rand = "0.8.5"
+futures = "0.3.31"
 
 [dev-dependencies]
 tokio = "1.40.0"
