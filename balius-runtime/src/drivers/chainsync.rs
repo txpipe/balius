@@ -6,7 +6,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 use utxorpc::CardanoSyncClient;
 
-use crate::{Block, ChainPoint, Error, Runtime};
+use crate::{Block, ChainPoint, Error, Runtime, Store};
 
 impl From<ChainPoint> for utxorpc::spec::sync::BlockRef {
     fn from(point: ChainPoint) -> Self {
@@ -15,6 +15,12 @@ impl From<ChainPoint> for utxorpc::spec::sync::BlockRef {
             #[allow(unreachable_patterns)]
             _ => todo!(),
         }
+    }
+}
+
+impl From<utxorpc::spec::sync::BlockRef> for ChainPoint {
+    fn from(point: utxorpc::spec::sync::BlockRef) -> Self {
+        ChainPoint::Cardano(point)
     }
 }
 
@@ -30,6 +36,7 @@ pub type NextBlock = Block;
 /// Gather undo blocks from the tip until the next block is encountered.
 async fn gather_blocks(
     tip: &mut utxorpc::LiveTip<utxorpc::Cardano>,
+    store: &Store,
 ) -> Result<(NextBlock, UndoBlocks), Error> {
     let mut undos = vec![];
 
@@ -37,14 +44,20 @@ async fn gather_blocks(
         let event = tip.event().await?;
 
         match event {
-            utxorpc::TipEvent::Apply(chain_block) => {
+            Some(utxorpc::TipEvent::Apply(chain_block)) => {
                 let next = Block::Cardano(chain_block.parsed.unwrap());
                 break Ok((next, undos));
             }
-            utxorpc::TipEvent::Undo(chain_block) => {
+            Some(utxorpc::TipEvent::Undo(chain_block)) => {
                 undos.push(Block::Cardano(chain_block.parsed.unwrap()));
             }
-            utxorpc::TipEvent::Reset(_) => unreachable!(),
+            Some(utxorpc::TipEvent::Reset(block_ref)) => {
+                tracing::warn!(block_ref =? &block_ref, "received reset event, reseting tip");
+                undos = store.handle_reset(block_ref.into())?;
+            }
+            None => {
+                tracing::warn!("Received None response from follow_tip, skipping")
+            }
         }
     }
 }
@@ -86,9 +99,9 @@ pub async fn run(
 
     // confirm first event is a reset to the requested chain point
     match tip.event().await? {
-        utxorpc::TipEvent::Reset(point) => {
+        Some(utxorpc::TipEvent::Reset(point)) => {
             warn!(
-                slot = point.index,
+                slot = point.slot,
                 "TODO: check that reset is to the requested chain point"
             );
         }
@@ -103,7 +116,7 @@ pub async fn run(
                 warn!("chain-sync driver cancelled");
                 break Ok(())
             },
-            batch = gather_blocks(&mut tip) => {
+            batch = gather_blocks(&mut tip, &runtime.store) => {
                 let (next, undos) = batch?;
                 runtime.handle_chain(&undos, &next).await?;
             }

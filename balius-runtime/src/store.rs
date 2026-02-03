@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use prost::Message;
 use redb::{ReadableTable as _, TableDefinition, WriteTransaction};
-use std::{path::Path, sync::Arc};
+use std::{collections::VecDeque, path::Path, sync::Arc};
 use tracing::warn;
 
 use crate::{Block, ChainPoint, Error};
@@ -108,6 +108,44 @@ impl Store {
         Ok(out)
     }
 
+    pub fn into_ephemeral(&mut self) -> Result<Self, super::Error> {
+        let new_db =
+            redb::Database::builder().create_with_backend(redb::backends::InMemoryBackend::new())?;
+
+        let rx = self.db.begin_read()?;
+        let wx = new_db.begin_write()?;
+
+        {
+            if let Ok(source) = rx.open_table(WAL) {
+                let mut target = wx.open_table(WAL)?;
+
+                for entry in source.iter()? {
+                    let (k, v) = entry?;
+                    target.insert(k.value(), v.value())?;
+                }
+            }
+
+            if let Ok(source) = rx.open_table(CURSORS) {
+                let mut target = wx.open_table(CURSORS)?;
+
+                for entry in source.iter()? {
+                    let (k, v) = entry?;
+                    target.insert(k.value(), v.value())?;
+                }
+            }
+        }
+
+        wx.commit()?;
+
+        let log_seq = Self::load_log_seq(&new_db)?.unwrap_or_default();
+        let new = Store {
+            db: Arc::new(new_db),
+            log_seq,
+        };
+
+        Ok(new)
+    }
+
     fn load_log_seq(db: &redb::Database) -> Result<Option<LogSeq>, Error> {
         let rx = db.begin_read()?;
 
@@ -191,5 +229,24 @@ impl Store {
         let lowest = cursors.iter().fold(None, |all, item| all.min(Some(*item)));
 
         Ok(lowest)
+    }
+
+    /// Return list of blocks to undo after receiving a reset response from chainsync.
+    pub fn handle_reset(&self, point: ChainPoint) -> Result<Vec<Block>, super::Error> {
+        let rx = self.db.begin_read()?;
+        let table = rx.open_table(WAL)?;
+
+        let mut undos = VecDeque::new();
+        for result in table.iter()?.rev() {
+            let (_, v) = result?;
+            let block = v.value().next_block.clone();
+            let decoded = Block::from_bytes(&block);
+            if decoded.slot() <= point.slot() {
+                break;
+            } else {
+                undos.push_front(decoded);
+            }
+        }
+        Ok(undos.into())
     }
 }

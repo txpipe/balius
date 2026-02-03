@@ -2,19 +2,34 @@ use std::sync::Arc;
 
 use tokio::sync::Mutex;
 
-use crate::wit::balius::app::ledger as wit;
+use crate::{metrics::Metrics, wit::balius::app::ledger as wit};
 
 pub mod mock;
 pub mod u5c;
 
 pub use wit::{Host as CustomLedger, LedgerError, TxoRef, Utxo, UtxoPage, UtxoPattern};
 
+#[async_trait::async_trait]
+pub trait LedgerProvider {
+    async fn read_utxos(
+        &mut self,
+        refs: Vec<wit::TxoRef>,
+    ) -> Result<Vec<wit::Utxo>, wit::LedgerError>;
+    async fn search_utxos(
+        &mut self,
+        pattern: wit::UtxoPattern,
+        start: Option<String>,
+        max_items: u32,
+    ) -> Result<wit::UtxoPage, wit::LedgerError>;
+    async fn read_params(&mut self) -> Result<wit::Json, wit::LedgerError>;
+}
+
 #[derive(Clone)]
 #[allow(clippy::large_enum_variant)]
 pub enum Ledger {
     Mock(mock::Ledger),
     U5C(u5c::Ledger),
-    Custom(Arc<Mutex<dyn wit::Host + Send + Sync>>),
+    Custom(Arc<Mutex<dyn LedgerProvider + Send + Sync>>),
 }
 
 impl From<mock::Ledger> for Ledger {
@@ -29,13 +44,29 @@ impl From<u5c::Ledger> for Ledger {
     }
 }
 
-#[async_trait::async_trait]
-impl wit::Host for Ledger {
+#[derive(Clone)]
+pub struct LedgerHost {
+    worker_id: String,
+    ledger: Ledger,
+    metrics: Arc<Metrics>,
+}
+impl LedgerHost {
+    pub fn new(worker_id: &str, ledger: &Ledger, metrics: &Arc<Metrics>) -> Self {
+        Self {
+            worker_id: worker_id.to_string(),
+            ledger: ledger.clone(),
+            metrics: metrics.clone(),
+        }
+    }
+}
+
+impl wit::Host for LedgerHost {
     async fn read_utxos(
         &mut self,
         refs: Vec<wit::TxoRef>,
     ) -> Result<Vec<wit::Utxo>, wit::LedgerError> {
-        match self {
+        self.metrics.ledger_read_utxos(&self.worker_id);
+        match &mut self.ledger {
             Ledger::Mock(ledger) => ledger.read_utxos(refs).await,
             Ledger::U5C(ledger) => ledger.read_utxos(refs).await,
             Ledger::Custom(ledger) => {
@@ -51,7 +82,8 @@ impl wit::Host for Ledger {
         start: Option<String>,
         max_items: u32,
     ) -> Result<wit::UtxoPage, wit::LedgerError> {
-        match self {
+        self.metrics.ledger_search_utxos(&self.worker_id);
+        match &mut self.ledger {
             Ledger::Mock(ledger) => ledger.search_utxos(pattern, start, max_items).await,
             Ledger::U5C(ledger) => ledger.search_utxos(pattern, start, max_items).await,
             Ledger::Custom(ledger) => {
@@ -62,7 +94,8 @@ impl wit::Host for Ledger {
     }
 
     async fn read_params(&mut self) -> Result<wit::Json, wit::LedgerError> {
-        match self {
+        self.metrics.ledger_read_params(&self.worker_id);
+        match &mut self.ledger {
             Ledger::Mock(ledger) => ledger.read_params().await,
             Ledger::U5C(ledger) => ledger.read_params().await,
             Ledger::Custom(ledger) => {

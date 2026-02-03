@@ -1,13 +1,17 @@
+use futures::future::join_all;
+use itertools::Itertools;
 use kv::KvHost;
+use ledgers::LedgerHost;
 use logging::LoggerHost;
 use router::Router;
 use sign::SignerHost;
-use std::{collections::HashMap, io::Read, path::Path, sync::Arc};
+use std::{collections::HashMap, io::Read, path::Path, sync::Arc, time::Instant};
 use submit::SubmitHost;
 use thiserror::Error;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, warn};
 use utxorpc::spec::sync::BlockRef;
+use wasmtime::component::HasSelf;
 
 pub mod wit {
     wasmtime::component::bindgen!({
@@ -75,6 +79,9 @@ pub enum Error {
 
     #[error("failed to interact with local WASM file: {0}")]
     IoError(std::io::Error),
+
+    #[error("kv error {0}")]
+    KvError(String),
 }
 
 impl From<wasmtime::Error> for Error {
@@ -135,7 +142,7 @@ impl From<object_store::Error> for Error {
     fn from(value: object_store::Error) -> Self {
         match value {
             object_store::Error::Generic { store, source } => {
-                Self::Config(format!("Failed to parse url: {}, {}", store, source))
+                Self::Config(format!("Failed to parse url: {store}, {source}"))
             }
             object_store::Error::NotFound { path: _, source } => {
                 Self::WorkerNotFound(source.to_string())
@@ -150,6 +157,20 @@ pub type BlockHash = pallas::crypto::hash::Hash<32>;
 
 pub enum ChainPoint {
     Cardano(utxorpc::spec::sync::BlockRef),
+}
+
+impl ChainPoint {
+    pub fn slot(&self) -> BlockSlot {
+        match self {
+            Self::Cardano(point) => point.slot,
+        }
+    }
+
+    pub fn hash(&self) -> BlockHash {
+        match self {
+            Self::Cardano(point) => point.hash.to_vec().as_slice().into(),
+        }
+    }
 }
 
 pub type LogSeq = u64;
@@ -266,8 +287,9 @@ impl Block {
     pub fn chain_point(&self) -> ChainPoint {
         match self {
             Self::Cardano(block) => ChainPoint::Cardano(BlockRef {
-                index: block.header.as_ref().unwrap().slot,
+                slot: block.header.as_ref().unwrap().slot,
                 hash: block.header.as_ref().unwrap().hash.clone(),
+                height: block.header.as_ref().unwrap().height,
             }),
         }
     }
@@ -290,7 +312,7 @@ impl Block {
 struct WorkerState {
     pub worker_id: String,
     pub router: router::Router,
-    pub ledger: Option<ledgers::Ledger>,
+    pub ledger: Option<ledgers::LedgerHost>,
     pub logging: Option<logging::LoggerHost>,
     pub kv: Option<kv::KvHost>,
     pub sign: Option<sign::SignerHost>,
@@ -298,7 +320,6 @@ struct WorkerState {
     pub http: Option<http::Http>,
 }
 
-#[async_trait::async_trait]
 impl wit::balius::app::driver::Host for WorkerState {
     async fn register_channel(
         &mut self,
@@ -471,13 +492,13 @@ impl LoadedWorker {
     }
 }
 
-type WorkerMap = HashMap<String, LoadedWorker>;
+type WorkerMap = HashMap<String, Mutex<LoadedWorker>>;
 
 #[derive(Clone)]
 pub struct Runtime {
     engine: wasmtime::Engine,
     linker: wasmtime::component::Linker<WorkerState>,
-    loaded: Arc<Mutex<WorkerMap>>,
+    loaded: Arc<RwLock<WorkerMap>>,
 
     store: store::Store,
     ledger: Option<ledgers::Ledger>,
@@ -496,13 +517,15 @@ impl Runtime {
     }
 
     pub async fn chain_cursor(&self) -> Result<Option<ChainPoint>, Error> {
-        let lowest_seq = self
-            .loaded
-            .lock()
-            .await
-            .values()
-            .flat_map(|w| w.cursor)
-            .min();
+        let mut lowest_seq = None;
+        for w in self.loaded.read().await.values() {
+            if let Some(cursor) = w.lock().await.cursor {
+                lowest_seq = match lowest_seq {
+                    Some(prev) => Some(std::cmp::min(prev, cursor)),
+                    None => Some(cursor),
+                };
+            }
+        }
 
         if let Some(seq) = lowest_seq {
             debug!(lowest_seq, "found lowest seq");
@@ -525,8 +548,14 @@ impl Runtime {
             WorkerState {
                 worker_id: id.to_owned(),
                 router: Router::new(),
-                ledger: self.ledger.clone(),
-                logging: self.logging.as_ref().map(|kv| LoggerHost::new(id, kv)),
+                ledger: self
+                    .ledger
+                    .as_ref()
+                    .map(|l| LedgerHost::new(id, l, &self.metrics)),
+                logging: self
+                    .logging
+                    .as_ref()
+                    .map(|kv| LoggerHost::new(id, kv, &self.metrics)),
                 kv: self
                     .kv
                     .as_ref()
@@ -549,15 +578,18 @@ impl Runtime {
         let cursor = self.store.get_worker_cursor(id)?;
         debug!(cursor, id, "found cursor for worker");
 
-        self.loaded.lock().await.insert(
+        let mut loaded = self.loaded.write().await;
+        loaded.insert(
             id.to_owned(),
-            LoadedWorker {
+            Mutex::new(LoadedWorker {
                 wasm_store,
                 instance,
                 cursor,
                 metrics: self.metrics.clone(),
-            },
+            }),
         );
+
+        self.metrics.workers_loaded(loaded.len() as u64);
 
         Ok(())
     }
@@ -590,7 +622,12 @@ impl Runtime {
     }
 
     pub async fn remove_worker(&self, id: &str) -> Result<(), Error> {
-        match self.loaded.lock().await.remove(id) {
+        let mut loaded = self.loaded.write().await;
+        let removed = loaded.remove(id);
+
+        self.metrics.workers_loaded(loaded.len() as u64);
+
+        match removed {
             Some(_) => {
                 info!(worker = id, "Successfully removed worker from runtime.")
             }
@@ -607,20 +644,43 @@ impl Runtime {
         undo_blocks: &Vec<Block>,
         next_block: &Block,
     ) -> Result<(), Error> {
+        let start = Instant::now();
         info!("applying block");
 
         let log_seq = self.store.write_ahead(undo_blocks, next_block)?;
 
-        let mut workers = self.loaded.lock().await;
+        let workers = self.loaded.read().await;
 
         let mut store_update = self.store.start_atomic_update(log_seq)?;
 
-        for (_, worker) in workers.iter_mut() {
-            worker.apply_chain(undo_blocks, next_block).await?;
-            store_update.update_worker_cursor(&worker.wasm_store.data().worker_id)?;
-        }
+        let update = async |worker: &Mutex<LoadedWorker>| -> Result<(String, f64), Error> {
+            let worker_start = Instant::now();
+            let mut lock = worker.lock().await;
+            lock.apply_chain(undo_blocks, next_block).await?;
+
+            Ok((
+                lock.wasm_store.data().worker_id.clone(),
+                worker_start.elapsed().as_secs_f64() * 1000.0,
+            ))
+        };
+        let updates = workers.values().map(update).collect_vec();
+
+        join_all(updates)
+            .await
+            .into_iter()
+            .collect::<Result<Vec<(String, f64)>, _>>()?
+            .iter()
+            .try_for_each(|(x, duration)| {
+                self.metrics.handle_worker_chain_duration_ms(x, *duration);
+                store_update.update_worker_cursor(x)
+            })?;
 
         store_update.commit()?;
+
+        self.metrics
+            .handle_chain_duration_ms(start.elapsed().as_secs_f64() * 1000.0);
+        self.metrics.latest_block_height(next_block.height());
+        self.metrics.latest_block_slot(next_block.slot());
 
         Ok(())
     }
@@ -631,11 +691,13 @@ impl Runtime {
         method: &str,
         params: Vec<u8>,
     ) -> Result<wit::Response, Error> {
-        let mut lock = self.loaded.lock().await;
-
-        let worker = lock
-            .get_mut(worker_id)
-            .ok_or(Error::WorkerNotFound(worker_id.to_string()))?;
+        let start = Instant::now();
+        let workers = self.loaded.read().await;
+        let mut worker = workers
+            .get(worker_id)
+            .ok_or(Error::WorkerNotFound(worker_id.to_string()))?
+            .lock()
+            .await;
 
         let channel = worker
             .wasm_store
@@ -647,8 +709,16 @@ impl Runtime {
 
         let result = worker.dispatch_event(channel, &evt).await;
         self.metrics.request(worker_id, method, result.is_ok());
+        let duration_ms = start.elapsed().as_secs_f64() * 1000.0;
+        self.metrics
+            .handle_request_duration_ms(worker_id, method, duration_ms);
         result
     }
+}
+
+struct HasField<T>(std::marker::PhantomData<T>);
+impl<T: 'static> wasmtime::component::HasData for HasField<T> {
+    type Data<'a> = &'a mut T;
 }
 
 pub struct RuntimeBuilder {
@@ -670,8 +740,11 @@ impl RuntimeBuilder {
         let engine = wasmtime::Engine::new(&config).unwrap();
         let mut linker = wasmtime::component::Linker::new(&engine);
 
-        wit::balius::app::driver::add_to_linker(&mut linker, |state: &mut WorkerState| state)
-            .unwrap();
+        wit::balius::app::driver::add_to_linker::<_, HasSelf<_>>(
+            &mut linker,
+            |state: &mut WorkerState| state,
+        )
+        .unwrap();
 
         Self {
             store,
@@ -689,18 +762,20 @@ impl RuntimeBuilder {
     pub fn with_ledger(mut self, ledger: ledgers::Ledger) -> Self {
         self.ledger = Some(ledger);
 
-        wit::balius::app::ledger::add_to_linker(&mut self.linker, |state: &mut WorkerState| {
-            state.ledger.as_mut().unwrap()
-        })
+        wit::balius::app::ledger::add_to_linker::<_, HasField<_>>(
+            &mut self.linker,
+            |state: &mut WorkerState| state.ledger.as_mut().unwrap(),
+        )
         .unwrap();
 
         self
     }
 
     pub fn with_kv(mut self, kv: kv::Kv) -> Self {
-        wit::balius::app::kv::add_to_linker(&mut self.linker, |state: &mut WorkerState| {
-            state.kv.as_mut().unwrap()
-        })
+        wit::balius::app::kv::add_to_linker::<_, HasField<_>>(
+            &mut self.linker,
+            |state: &mut WorkerState| state.kv.as_mut().unwrap(),
+        )
         .unwrap();
         self.kv = Some(kv);
 
@@ -710,9 +785,10 @@ impl RuntimeBuilder {
     pub fn with_logger(mut self, logging: logging::Logger) -> Self {
         self.logging = Some(logging);
 
-        wit::balius::app::logging::add_to_linker(&mut self.linker, |state: &mut WorkerState| {
-            state.logging.as_mut().unwrap()
-        })
+        wit::balius::app::logging::add_to_linker::<_, HasField<_>>(
+            &mut self.linker,
+            |state: &mut WorkerState| state.logging.as_mut().unwrap(),
+        )
         .unwrap();
 
         self
@@ -721,9 +797,10 @@ impl RuntimeBuilder {
     pub fn with_signer(mut self, sign: sign::Signer) -> Self {
         self.sign = Some(sign);
 
-        wit::balius::app::sign::add_to_linker(&mut self.linker, |state: &mut WorkerState| {
-            state.sign.as_mut().unwrap()
-        })
+        wit::balius::app::sign::add_to_linker::<_, HasField<_>>(
+            &mut self.linker,
+            |state: &mut WorkerState| state.sign.as_mut().unwrap(),
+        )
         .unwrap();
 
         self
@@ -732,9 +809,10 @@ impl RuntimeBuilder {
     pub fn with_submit(mut self, submit: submit::Submit) -> Self {
         self.submit = Some(submit);
 
-        wit::balius::app::submit::add_to_linker(&mut self.linker, |state: &mut WorkerState| {
-            state.submit.as_mut().unwrap()
-        })
+        wit::balius::app::submit::add_to_linker::<_, HasField<_>>(
+            &mut self.linker,
+            |state: &mut WorkerState| state.submit.as_mut().unwrap(),
+        )
         .unwrap();
 
         self
@@ -742,9 +820,10 @@ impl RuntimeBuilder {
 
     pub fn with_http(mut self, http: http::Http) -> Self {
         self.http = Some(http);
-        wit::balius::app::http::add_to_linker(&mut self.linker, |state: &mut WorkerState| {
-            state.http.as_mut().unwrap()
-        })
+        wit::balius::app::http::add_to_linker::<_, HasField<_>>(
+            &mut self.linker,
+            |state: &mut WorkerState| state.http.as_mut().unwrap(),
+        )
         .unwrap();
 
         self
@@ -768,8 +847,11 @@ impl RuntimeBuilder {
             http,
         } = this;
 
+        let metrics: Arc<metrics::Metrics> = Default::default();
+        metrics.workers_loaded(0);
+
         Ok(Runtime {
-            metrics: Default::default(),
+            metrics,
             loaded: Default::default(),
             engine,
             linker,

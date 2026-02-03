@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use tokio::sync::Mutex;
 
-use crate::wit::balius::app::sign as wit;
+use crate::{metrics::Metrics, wit::balius::app::sign as wit};
 
 #[derive(Clone)]
 pub enum Signer {
@@ -21,12 +21,14 @@ impl From<in_memory::Signer> for Signer {
 pub struct SignerHost {
     worker_id: String,
     provider: Signer,
+    metrics: Arc<Metrics>,
 }
 impl SignerHost {
-    pub fn new(worker_id: &str, provider: &Signer) -> Self {
+    pub fn new(worker_id: &str, provider: &Signer, metrics: &Arc<Metrics>) -> Self {
         Self {
             worker_id: worker_id.to_string(),
             provider: provider.clone(),
+            metrics: metrics.clone(),
         }
     }
 
@@ -52,13 +54,13 @@ pub trait SignerProvider {
     ) -> Result<wit::Signature, wit::SignError>;
 }
 
-#[async_trait::async_trait]
 impl wit::Host for SignerHost {
     async fn sign_payload(
         &mut self,
         key_name: String,
         payload: wit::Payload,
     ) -> Result<wit::Signature, wit::SignError> {
+        self.metrics.signer_sign_payload(&self.worker_id);
         match &mut self.provider {
             Signer::InMemory(signer) => {
                 signer

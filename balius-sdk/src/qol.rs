@@ -74,7 +74,7 @@ impl From<Error> for wit::HandleError {
             },
             Error::EventMismatch(x) => wit::HandleError {
                 code: 9,
-                message: format!("event mismatch, expected {}", x),
+                message: format!("event mismatch, expected {x}"),
             },
             Error::Submit(err) => wit::HandleError {
                 code: 10,

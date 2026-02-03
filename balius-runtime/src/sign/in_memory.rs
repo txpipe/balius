@@ -31,10 +31,10 @@ impl SignerProvider for Signer {
             panic!("Unsupported algorithm")
         }
         let keys = self.map.entry(worker_id.to_string()).or_default();
-        let secret_key = ed25519::SecretKey::new(OsRng);
-        let public_key = secret_key.public_key();
-        let _ = keys.insert(key_name, secret_key.into());
-        public_key.as_ref().to_vec()
+        let secret_key = keys
+            .entry(key_name)
+            .or_insert(ed25519::SecretKey::new(OsRng).into());
+        secret_key.public_key()
     }
 
     async fn sign_payload(
@@ -55,7 +55,7 @@ impl SignerProvider for Signer {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum SignerKey {
     Ed25519(Ed25519Key),
 }
@@ -73,14 +73,20 @@ impl From<ed25519::SecretKeyExtended> for SignerKey {
 }
 
 impl SignerKey {
-    fn sign_payload(&self, payload: wit::Payload) -> Result<wit::Signature, wit::SignError> {
+    pub fn sign_payload(&self, payload: wit::Payload) -> Result<wit::Signature, wit::SignError> {
         match self {
             Self::Ed25519(key) => Ok(key.sign_payload(payload)),
         }
     }
+
+    pub fn public_key(&self) -> Vec<u8> {
+        match self {
+            Self::Ed25519(key) => key.public_key(),
+        }
+    }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Ed25519Key {
     SecretKey(ed25519::SecretKey),
     SecretKeyExtended(ed25519::SecretKeyExtended),
@@ -92,5 +98,11 @@ impl Ed25519Key {
             Self::SecretKeyExtended(key) => key.sign(payload),
         };
         signature.as_ref().to_vec()
+    }
+    fn public_key(&self) -> Vec<u8> {
+        match self {
+            Self::SecretKey(key) => key.public_key().as_ref().to_vec(),
+            Self::SecretKeyExtended(key) => key.public_key().as_ref().to_vec(),
+        }
     }
 }

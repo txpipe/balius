@@ -126,20 +126,15 @@ impl Ledger {
     }
 
     pub async fn read_params(&mut self) -> Result<wit::Json, wit::LedgerError> {
-        let req = utxorpc::spec::query::ReadParamsRequest::default();
         let res = self
             .queries
-            .read_params(req)
+            .read_params()
             .await
-            .map_err(|err| wit::LedgerError::Upstream(format!("{:?}", err)))?
-            .into_inner();
+            .map_err(|err| wit::LedgerError::Upstream(format!("{err:?}")))?;
 
-        let params = res
-            .values
-            .and_then(|v| v.params)
-            .ok_or(wit::LedgerError::Upstream(
-                "unexpected response from read_params".to_string(),
-            ))?;
+        let params = res.params.ok_or(wit::LedgerError::Upstream(
+            "unexpected response from read_params".to_string(),
+        ))?;
         match params {
             utxorpc::spec::query::any_chain_params::Params::Cardano(params) => {
                 Ok(serde_json::to_vec(&params).unwrap())

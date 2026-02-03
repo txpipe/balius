@@ -115,7 +115,7 @@ async fn run_project_with_config(
 
     let config: serde_json::Value = load_worker_config(config_path)?;
 
-    let wasm_path = format!("{}-c.wasm", project_name);
+    let wasm_path = format!("{project_name}-c.wasm");
 
     runtime
         .register_worker_from_file(project_name, &wasm_path, config)
@@ -127,7 +127,7 @@ async fn run_project_with_config(
 
     let jsonrpc_server = tokio::spawn(balius_runtime::drivers::jsonrpc::serve(
         balius_runtime::drivers::jsonrpc::Config {
-            listen_address: format!("0.0.0.0:{}", port),
+            listen_address: format!("0.0.0.0:{port}"),
         },
         runtime.clone(),
         cancel.clone(),

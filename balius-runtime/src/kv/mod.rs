@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
-use crate::{metrics::Metrics, wit::balius::app::kv as wit};
+use crate::{metrics::Metrics, wit::balius::app::kv as wit, Error};
 
 pub use wit::{Host as CustomKv, KvError, Payload};
 
@@ -9,7 +9,23 @@ pub use wit::{Host as CustomKv, KvError, Payload};
 pub enum Kv {
     Mock,
     Memory(Arc<RwLock<memory::MemoryKv>>),
+    Redb(Arc<RwLock<redb::RedbKv>>),
     Custom(Arc<Mutex<dyn KvProvider + Send + Sync>>),
+}
+
+impl Kv {
+    pub async fn into_ephemeral(self) -> Result<Self, Error> {
+        match self {
+            Kv::Mock => Ok(self),
+            Kv::Memory(x) => Ok(Kv::Memory(x)),
+            Kv::Redb(x) => Ok(Kv::Redb(Arc::new(RwLock::new(
+                x.write().await.into_ephemeral()?,
+            )))),
+            Kv::Custom(_) => Err(Error::KvError(
+                "Cannot convert custom kv into ephemeral".to_string(),
+            )),
+        }
+    }
 }
 
 pub struct KvHost {
@@ -28,6 +44,7 @@ impl KvHost {
 }
 
 pub mod memory;
+pub mod redb;
 
 #[async_trait::async_trait]
 pub trait KvProvider {
@@ -45,13 +62,19 @@ pub trait KvProvider {
     ) -> Result<Vec<String>, KvError>;
 }
 
-#[async_trait::async_trait]
 impl wit::Host for KvHost {
     async fn get_value(&mut self, key: String) -> Result<Payload, KvError> {
         self.metrics.kv_get(&self.worker_id);
         match &mut self.provider {
             Kv::Mock => todo!(),
             Kv::Memory(kv) => {
+                kv.read()
+                    .await
+                    .clone()
+                    .get_value(&self.worker_id, key)
+                    .await
+            }
+            Kv::Redb(kv) => {
                 kv.read()
                     .await
                     .clone()
@@ -75,6 +98,14 @@ impl wit::Host for KvHost {
                     .set_value(&self.worker_id, key, value)
                     .await
             }
+            Kv::Redb(kv) => {
+                kv.read()
+                    .await
+                    .clone()
+                    .set_value(&self.worker_id, key, value)
+                    .await
+            }
+
             Kv::Custom(kv) => {
                 let mut lock = kv.lock().await;
                 lock.set_value(&self.worker_id, key, value).await
@@ -93,6 +124,14 @@ impl wit::Host for KvHost {
                     .list_values(&self.worker_id, prefix)
                     .await
             }
+            Kv::Redb(kv) => {
+                kv.read()
+                    .await
+                    .clone()
+                    .list_values(&self.worker_id, prefix)
+                    .await
+            }
+
             Kv::Custom(kv) => {
                 let mut lock = kv.lock().await;
                 lock.list_values(&self.worker_id, prefix).await
