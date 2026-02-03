@@ -43,6 +43,7 @@ impl Submit {
                     }
                 }
                 utxorpc::Error::TransportError(err) => wit::SubmitError::Internal(err.to_string()),
+                utxorpc::Error::ParseError(err) => wit::SubmitError::Internal(err.to_string()),
             })?;
         Ok(())
     }

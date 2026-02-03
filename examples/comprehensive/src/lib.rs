@@ -169,6 +169,10 @@ fn submit_tx(_: Config<MyConfig>, request: Params<SubmitTxParams>) -> WorkerResu
     balius_sdk::wit::balius::app::submit::submit_tx(&cbor)?;
 
     Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+
 struct LedgerSearchUtxosParams {
     address: String,
     max_items: u32,

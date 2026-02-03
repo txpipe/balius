@@ -11,19 +11,6 @@ use tracing::info;
 mod boilerplate;
 mod config;
 
-impl Config {
-    pub async fn into_submit(&self) -> balius_runtime::submit::Submit {
-        match &self.submit {
-            Some(SubmitConfig::U5c(cfg)) => balius_runtime::submit::Submit::U5C(
-                balius_runtime::submit::u5c::Submit::new(cfg)
-                    .await
-                    .expect("Failed to convert config into submit interface"),
-            ),
-            None => balius_runtime::submit::Submit::Mock,
-        }
-    }
-}
-
 fn load_worker_config(config_path: Option<PathBuf>) -> miette::Result<serde_json::Value> {
     match config_path {
         Some(path) => {
@@ -110,7 +97,7 @@ async fn daemon(debug: bool) -> miette::Result<()> {
         .with_kv(kv)
         .with_logger((&config).into())
         .with_signer((&config).into())
-        .with_submit(config.into_submit().await)
+        .with_submit(config.clone().into_submit().await)
         .with_http((&config).into())
         .build()
         .into_diagnostic()

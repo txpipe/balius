@@ -6,12 +6,17 @@ use crate::{metrics::Metrics, wit::balius::app::submit as wit};
 
 pub mod u5c;
 
+#[async_trait::async_trait]
+pub trait Submitter: Send + Sync {
+    async fn submit_tx(&mut self, tx: wit::Cbor) -> Result<(), wit::SubmitError>;
+}
+
 #[derive(Clone)]
 #[allow(clippy::large_enum_variant)]
 pub enum Submit {
     Mock,
     U5C(u5c::Submit),
-    Custom(Arc<Mutex<dyn wit::Host + Send + Sync>>),
+    Custom(Arc<Mutex<dyn Submitter + Send + Sync>>),
 }
 
 pub struct SubmitHost {
@@ -29,7 +34,6 @@ impl SubmitHost {
     }
 }
 
-#[async_trait::async_trait]
 impl wit::Host for SubmitHost {
     async fn submit_tx(&mut self, tx: wit::Cbor) -> Result<(), wit::SubmitError> {
         self.metrics.submit_tx(&self.worker_id);

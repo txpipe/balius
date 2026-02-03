@@ -82,6 +82,8 @@ impl Metrics {
         let submit_tx = meter
             .u64_counter("submit_tx")
             .with_description("Amount of submit_tx calls per worker.")
+            .build();
+
         let signer_sign_payload = meter
             .u64_counter("signer_sign_payload")
             .with_description("Amount of sign payload handled per worker.")
