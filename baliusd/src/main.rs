@@ -97,6 +97,7 @@ async fn daemon(debug: bool) -> miette::Result<()> {
         .with_kv(kv)
         .with_logger((&config).into())
         .with_signer((&config).into())
+        .with_submit(config.clone().into_submit().await)
         .with_http((&config).into())
         .build()
         .into_diagnostic()

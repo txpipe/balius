@@ -6,6 +6,7 @@ use logging::LoggerHost;
 use router::Router;
 use sign::SignerHost;
 use std::{collections::HashMap, io::Read, path::Path, sync::Arc, time::Instant};
+use submit::SubmitHost;
 use thiserror::Error;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, warn};
@@ -63,6 +64,9 @@ pub enum Error {
 
     #[error("ledger error: {0}")]
     Ledger(String),
+
+    #[error("submit error: {0}")]
+    Submit(String),
 
     #[error("config error: {0}")]
     Config(String),
@@ -312,7 +316,7 @@ struct WorkerState {
     pub logging: Option<logging::LoggerHost>,
     pub kv: Option<kv::KvHost>,
     pub sign: Option<sign::SignerHost>,
-    pub submit: Option<submit::Submit>,
+    pub submit: Option<submit::SubmitHost>,
     pub http: Option<http::Http>,
 }
 
@@ -560,7 +564,10 @@ impl Runtime {
                     .sign
                     .as_ref()
                     .map(|s| SignerHost::new(id, s, &self.metrics)),
-                submit: self.submit.clone(),
+                submit: self
+                    .submit
+                    .as_ref()
+                    .map(|s| SubmitHost::new(id, s, &self.metrics)),
                 http: self.http.clone(),
             },
         );

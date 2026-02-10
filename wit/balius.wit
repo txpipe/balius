@@ -105,7 +105,10 @@ interface sign {
 
 interface submit {
     type cbor = list<u8>;
-    type submit-error = u32;
+    variant submit-error {
+      internal(string),
+      invalid(string)
+    }
 
     submit-tx: func(tx: cbor) -> result<_, submit-error>;
 }
