@@ -23,7 +23,6 @@ pub mod wit {
 
 mod metrics;
 mod router;
-mod store;
 
 // implementations
 pub mod drivers;
@@ -32,9 +31,10 @@ pub mod kv;
 pub mod ledgers;
 pub mod logging;
 pub mod sign;
+pub mod store;
 pub mod submit;
 
-pub use store::Store;
+pub use store::{AtomicUpdateTrait, Store, StoreTrait};
 pub use wit::Response;
 
 pub type WorkerId = String;
@@ -45,7 +45,7 @@ pub enum Error {
     Wasm(wasmtime::Error),
 
     #[error("store error {0}")]
-    Store(Box<redb::Error>),
+    Store(String),
 
     #[error("worker not found '{0}'")]
     WorkerNotFound(WorkerId),
@@ -92,37 +92,37 @@ impl From<wasmtime::Error> for Error {
 
 impl From<redb::Error> for Error {
     fn from(value: redb::Error) -> Self {
-        Self::Store(Box::new(value))
+        Self::Store(value.to_string())
     }
 }
 
 impl From<redb::DatabaseError> for Error {
     fn from(value: redb::DatabaseError) -> Self {
-        Self::Store(Box::new(value.into()))
+        Self::Store(value.to_string())
     }
 }
 
 impl From<redb::TransactionError> for Error {
     fn from(value: redb::TransactionError) -> Self {
-        Self::Store(Box::new(value.into()))
+        Self::Store(value.to_string())
     }
 }
 
 impl From<redb::TableError> for Error {
     fn from(value: redb::TableError) -> Self {
-        Self::Store(Box::new(value.into()))
+        Self::Store(value.to_string())
     }
 }
 
 impl From<redb::CommitError> for Error {
     fn from(value: redb::CommitError) -> Self {
-        Self::Store(Box::new(value.into()))
+        Self::Store(value.to_string())
     }
 }
 
 impl From<redb::StorageError> for Error {
     fn from(value: redb::StorageError) -> Self {
-        Self::Store(Box::new(value.into()))
+        Self::Store(value.to_string())
     }
 }
 
@@ -529,7 +529,7 @@ impl Runtime {
 
         if let Some(seq) = lowest_seq {
             debug!(lowest_seq, "found lowest seq");
-            return self.store.find_chain_point(seq);
+            return self.store.find_chain_point(seq).await;
         }
 
         Ok(None)
@@ -578,7 +578,7 @@ impl Runtime {
         let config = serde_json::to_vec(&config).unwrap();
         instance.call_init(&mut wasm_store, &config).await?;
 
-        let cursor = self.store.get_worker_cursor(id)?;
+        let cursor = self.store.get_worker_cursor(id).await?;
         debug!(cursor, id, "found cursor for worker");
 
         let mut loaded = self.loaded.write().await;
@@ -650,11 +650,11 @@ impl Runtime {
         let start = Instant::now();
         info!("applying block");
 
-        let log_seq = self.store.write_ahead(undo_blocks, next_block)?;
+        let log_seq = self.store.write_ahead(undo_blocks, next_block).await?;
 
         let workers = self.loaded.read().await;
 
-        let mut store_update = self.store.start_atomic_update(log_seq)?;
+        let mut store_update = self.store.start_atomic_update(log_seq).await?;
 
         let update = async |worker: &Mutex<LoadedWorker>| -> Result<(String, f64), Error> {
             let worker_start = Instant::now();
@@ -668,17 +668,16 @@ impl Runtime {
         };
         let updates = workers.values().map(update).collect_vec();
 
-        join_all(updates)
+        for (x, duration) in join_all(updates)
             .await
             .into_iter()
             .collect::<Result<Vec<(String, f64)>, _>>()?
-            .iter()
-            .try_for_each(|(x, duration)| {
-                self.metrics.handle_worker_chain_duration_ms(x, *duration);
-                store_update.update_worker_cursor(x)
-            })?;
+        {
+            self.metrics.handle_worker_chain_duration_ms(&x, duration);
+            store_update.update_worker_cursor(&x).await?;
+        }
 
-        store_update.commit()?;
+        store_update.commit().await?;
 
         self.metrics
             .handle_chain_duration_ms(start.elapsed().as_secs_f64() * 1000.0);

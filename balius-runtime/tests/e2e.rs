@@ -5,7 +5,7 @@ use std::{
     process::Command,
 };
 
-use balius_runtime::{ledgers, Runtime, Store};
+use balius_runtime::{ledgers, store::redb::Store as RedbStore, Runtime, Store};
 use serde_json::json;
 use wit_component::ComponentEncoder;
 
@@ -41,9 +41,9 @@ fn build_module(src_dir: impl AsRef<Path>, module_name: &str, target: impl AsRef
 async fn faucet_claim() {
     build_module("../examples/minter/offchain", "minter", "tests/faucet.wasm");
 
-    let store = Store::open("tests/balius.db", None).unwrap();
+    let store = Store::Redb(RedbStore::open("tests/balius.db", None).unwrap());
 
-    let mut runtime = Runtime::builder(store)
+    let runtime = Runtime::builder(store)
         .with_ledger(ledgers::mock::Ledger.into())
         .build()
         .unwrap();

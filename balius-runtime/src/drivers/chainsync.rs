@@ -6,7 +6,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 use utxorpc::CardanoSyncClient;
 
-use crate::{Block, ChainPoint, Error, Runtime, Store};
+use crate::{Block, ChainPoint, Error, Runtime, Store, StoreTrait};
 
 impl From<ChainPoint> for utxorpc::spec::sync::BlockRef {
     fn from(point: ChainPoint) -> Self {
@@ -53,7 +53,7 @@ async fn gather_blocks(
             }
             Some(utxorpc::TipEvent::Reset(block_ref)) => {
                 tracing::warn!(block_ref =? &block_ref, "received reset event, reseting tip");
-                undos = store.handle_reset(block_ref.into())?;
+                undos = store.handle_reset(block_ref.into()).await?;
             }
             None => {
                 tracing::warn!("Received None response from follow_tip, skipping")
