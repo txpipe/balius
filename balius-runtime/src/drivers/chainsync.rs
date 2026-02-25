@@ -56,7 +56,7 @@ async fn gather_blocks(
                 undos = store.handle_reset(block_ref.into())?;
             }
             None => {
-                tracing::error!("Received None response from follow_tip, skipping");
+                tracing::error!("Received None response from follow_tip");
                 return Err(Error::Driver(
                     "Invalid response from follow_tip".to_string(),
                 ));
