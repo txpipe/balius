@@ -9,7 +9,7 @@ repository = "https://github.com/txpipe/balius"
 readme = "README.md"
 
 [dependencies]
-utxorpc-spec = { version = "0.16.0", features = ["ledgers"], default-features = false }
+utxorpc-spec = { version = "0.18.1", features = ["ledgers"], default-features = false }
 balius-macros = { version = "0.5.2", path = "../balius-macros" }
 hex = "0.4.3"
 pallas-addresses = { version = "0.32.0" }
