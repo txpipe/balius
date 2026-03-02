@@ -281,6 +281,23 @@ pub struct Utxo<D> {
     pub datum: Option<D>,
 }
 
+impl<D> Utxo<D> {
+    pub fn coin(&self) -> u64 {
+        self.utxo
+            .coin
+            .as_ref()
+            .and_then(|x| {
+                x.big_int.as_ref().and_then(|y| match y {
+                    utxorpc_spec::utxorpc::v1alpha::cardano::big_int::BigInt::Int(z) => {
+                        Some(*z as u64)
+                    }
+                    _ => None,
+                })
+            })
+            .unwrap_or_default()
+    }
+}
+
 impl<D> TryFrom<wit::Event> for Utxo<D> {
     type Error = Error;
 

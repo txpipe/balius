@@ -42,7 +42,7 @@ fn handle_utxo(_: Config<WalletConfig>, utxo: Utxo<Datum>) -> WorkerResult<Ack> 
     let balances = BalanceTable::new("balances".to_string());
 
     balances
-        .set(&hex::encode(&utxo.utxo.address), utxo.utxo.coin)
+        .set(&hex::encode(&utxo.utxo.address), utxo.coin())
         .unwrap();
 
     Ok(Ack)
