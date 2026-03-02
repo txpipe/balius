@@ -160,6 +160,19 @@ fn signer_sign_payload(
 
 #[serde_as]
 #[derive(Serialize, Deserialize)]
+struct SubmitTxParams {
+    cbor: String,
+}
+
+fn submit_tx(_: Config<MyConfig>, request: Params<SubmitTxParams>) -> WorkerResult<()> {
+    let cbor = hex::decode(&request.cbor).map_err(|_| Error::BadParams)?;
+    balius_sdk::wit::balius::app::submit::submit_tx(&cbor)?;
+
+    Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+
 struct LedgerSearchUtxosParams {
     address: String,
     max_items: u32,
@@ -236,6 +249,7 @@ fn main() -> balius_sdk::Worker {
             FnHandler::from(signer_get_public_key),
         )
         .with_request_handler("signer-sign-payload", FnHandler::from(signer_sign_payload))
+        .with_request_handler("submit-tx", FnHandler::from(submit_tx))
         .with_request_handler("ledger-search-utxos", FnHandler::from(ledger_search_utxos))
         .with_signer("alice", "ed25519")
         .with_signer("bob", "ed25519")

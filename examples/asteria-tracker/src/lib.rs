@@ -144,7 +144,7 @@ fn handle_utxo(config: sdk::Config<Config>, utxo: sdk::Utxo<Datum>) -> sdk::Work
         worker::logging::log(
             worker::logging::Level::Debug,
             &format!("UTxO {}:", &out_ref),
-            &format!("{:#?} - {pos_x_str} - {pos_y_str} - {fuel_str}", operation),
+            &format!("{operation:#?} - {pos_x_str} - {pos_y_str} - {fuel_str}"),
         );
 
         let _ = HttpRequest::post(url).json(&payload)?.send()?;

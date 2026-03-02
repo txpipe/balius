@@ -12,7 +12,7 @@ use balius_runtime::{
     sign::in_memory::{Ed25519Key, SignerKey},
 };
 use pallas::crypto::key::ed25519;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use tokio::sync::{Mutex, RwLock};
 
@@ -145,6 +145,13 @@ pub enum HttpConfig {
     Reqwest(ReqwestHttpConfig),
 }
 
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(tag = "type")]
+#[serde(rename_all = "lowercase")]
+pub enum SubmitConfig {
+    U5c(balius_runtime::submit::u5c::Config),
+}
+
 #[derive(Deserialize, Clone, Debug)]
 pub struct Config {
     pub rpc: drivers::jsonrpc::Config,
@@ -158,6 +165,7 @@ pub struct Config {
     pub signing: Option<SignerConfig>,
     pub store: Option<StoreConfig>,
     pub http: Option<HttpConfig>,
+    pub submit: Option<SubmitConfig>,
 }
 
 impl From<&Config> for balius_runtime::kv::Kv {
@@ -230,5 +238,18 @@ impl From<&Config> for balius_runtime::http::Http {
             .build()
             .expect("Failed to build http client");
         balius_runtime::http::Http::Reqwest(client)
+    }
+}
+
+impl Config {
+    pub async fn into_submit(self) -> balius_runtime::submit::Submit {
+        match &self.submit {
+            Some(SubmitConfig::U5c(cfg)) => balius_runtime::submit::Submit::U5C(
+                balius_runtime::submit::u5c::Submit::new(cfg)
+                    .await
+                    .expect("Failed to convert config into submit interface"),
+            ),
+            None => balius_runtime::submit::Submit::Mock,
+        }
     }
 }
