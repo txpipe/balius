@@ -1,4 +1,3 @@
-use itertools::Itertools;
 use prost::Message;
 use redb::{ReadableTable as _, TableDefinition, WriteTransaction};
 use std::{collections::VecDeque, path::Path, sync::Arc};
@@ -6,16 +5,8 @@ use tracing::warn;
 
 use crate::{Block, ChainPoint, Error};
 
-pub type WorkerId = String;
-pub type LogSeq = u64;
-
-#[derive(Message)]
-pub struct LogEntry {
-    #[prost(bytes, tag = "1")]
-    pub next_block: Vec<u8>,
-    #[prost(bytes, repeated, tag = "2")]
-    pub undo_blocks: Vec<Vec<u8>>,
-}
+use super::StoreTrait;
+pub use super::{AtomicUpdateTrait, LogEntry, LogSeq, WorkerId};
 
 impl redb::Value for LogEntry {
     type SelfType<'a>
@@ -58,20 +49,40 @@ const WAL: TableDefinition<LogSeq, LogEntry> = TableDefinition::new("wal");
 const DEFAULT_CACHE_SIZE_MB: usize = 50;
 
 pub struct AtomicUpdate {
-    wx: WriteTransaction,
+    wx: Option<WriteTransaction>,
     log_seq: LogSeq,
 }
-
 impl AtomicUpdate {
-    pub fn update_worker_cursor(&mut self, id: &str) -> Result<(), super::Error> {
-        let mut table = self.wx.open_table(CURSORS)?;
+    pub fn new(wx: WriteTransaction, log_seq: LogSeq) -> Self {
+        Self {
+            wx: Some(wx),
+            log_seq,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl AtomicUpdateTrait for AtomicUpdate {
+    async fn update_worker_cursor(&mut self, id: &str) -> Result<(), super::Error> {
+        let Some(wx) = self.wx.as_mut() else {
+            return Err(super::Error::Store(
+                "Transaction already commited".to_string(),
+            ));
+        };
+
+        let mut table = wx.open_table(CURSORS)?;
         table.insert(id.to_owned(), self.log_seq)?;
 
         Ok(())
     }
 
-    pub fn commit(self) -> Result<(), super::Error> {
-        self.wx.commit()?;
+    async fn commit(&mut self) -> Result<(), super::Error> {
+        let Some(wx) = self.wx.take() else {
+            return Err(super::Error::Store(
+                "Transaction already commited".to_string(),
+            ));
+        };
+        wx.commit()?;
         Ok(())
     }
 }
@@ -165,15 +176,18 @@ impl Store {
         let entry = table.get(seq)?;
         Ok(entry.map(|x| x.value()))
     }
+}
 
-    pub fn find_chain_point(&self, seq: LogSeq) -> Result<Option<ChainPoint>, Error> {
+#[async_trait::async_trait]
+impl StoreTrait for Store {
+    async fn find_chain_point(&self, seq: LogSeq) -> Result<Option<ChainPoint>, Error> {
         let entry = self.get_entry(seq)?;
         let block = Block::from_bytes(&entry.unwrap().next_block);
 
         Ok(Some(block.chain_point()))
     }
 
-    pub fn write_ahead(
+    async fn write_ahead(
         &mut self,
         undo_blocks: &[Block],
         next_block: &Block,
@@ -196,7 +210,7 @@ impl Store {
     }
 
     // TODO: see if loading in batch is worth it
-    pub fn get_worker_cursor(&self, id: &str) -> Result<Option<LogSeq>, super::Error> {
+    async fn get_worker_cursor(&self, id: &str) -> Result<Option<LogSeq>, super::Error> {
         let rx = self.db.begin_read()?;
 
         let table = match rx.open_table(CURSORS) {
@@ -209,30 +223,15 @@ impl Store {
         Ok(cursor.map(|x| x.value()))
     }
 
-    pub fn start_atomic_update(&self, log_seq: LogSeq) -> Result<AtomicUpdate, super::Error> {
+    async fn start_atomic_update(
+        &self,
+        log_seq: LogSeq,
+    ) -> Result<super::AtomicUpdate, super::Error> {
         let wx = self.db.begin_write()?;
-        Ok(AtomicUpdate { wx, log_seq })
+        Ok(super::AtomicUpdate::Redb(AtomicUpdate::new(wx, log_seq)))
     }
 
-    // TODO: I don't think we need this since we're going to load each cursor as
-    // part of the loaded worker
-    pub fn lowest_cursor(&self) -> Result<Option<LogSeq>, super::Error> {
-        let rx = self.db.begin_read()?;
-
-        let table = rx.open_table(CURSORS)?;
-
-        let cursors: Vec<_> = table
-            .iter()?
-            .map_ok(|(_, value)| value.value())
-            .try_collect()?;
-
-        let lowest = cursors.iter().fold(None, |all, item| all.min(Some(*item)));
-
-        Ok(lowest)
-    }
-
-    /// Return list of blocks to undo after receiving a reset response from chainsync.
-    pub fn handle_reset(&self, point: ChainPoint) -> Result<Vec<Block>, super::Error> {
+    async fn handle_reset(&self, point: ChainPoint) -> Result<Vec<Block>, super::Error> {
         let rx = self.db.begin_read()?;
         let table = rx.open_table(WAL)?;
 
