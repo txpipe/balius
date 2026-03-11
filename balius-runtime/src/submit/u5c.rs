@@ -30,21 +30,18 @@ impl Submit {
     }
 
     pub async fn submit_tx(&mut self, tx: wit::Cbor) -> Result<(), wit::SubmitError> {
-        self.client
-            .submit_tx(vec![tx])
-            .await
-            .map_err(|err| match err {
-                utxorpc::Error::GrpcError(status) => {
-                    let code: i32 = status.code().into();
-                    if code == 3 {
-                        wit::SubmitError::Invalid(status.to_string())
-                    } else {
-                        wit::SubmitError::Internal(status.to_string())
-                    }
+        self.client.submit_tx(tx).await.map_err(|err| match err {
+            utxorpc::Error::GrpcError(status) => {
+                let code: i32 = status.code().into();
+                if code == 3 {
+                    wit::SubmitError::Invalid(status.to_string())
+                } else {
+                    wit::SubmitError::Internal(status.to_string())
                 }
-                utxorpc::Error::TransportError(err) => wit::SubmitError::Internal(err.to_string()),
-                utxorpc::Error::ParseError(err) => wit::SubmitError::Internal(err.to_string()),
-            })?;
+            }
+            utxorpc::Error::TransportError(err) => wit::SubmitError::Internal(err.to_string()),
+            utxorpc::Error::ParseError(err) => wit::SubmitError::Internal(err.to_string()),
+        })?;
         Ok(())
     }
 }

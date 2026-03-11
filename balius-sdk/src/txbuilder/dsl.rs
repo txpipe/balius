@@ -340,7 +340,22 @@ impl ValueExpr for MinUtxoLovelace {
         };
 
         let serialized = pallas_codec::minicbor::to_vec(parent).unwrap();
-        let min_lovelace = (160u64 + serialized.len() as u64) * ctx.pparams.coins_per_utxo_byte;
+        let coins_per_utxo_byte = ctx
+            .pparams
+            .coins_per_utxo_byte
+            .as_ref()
+            .and_then(|x| {
+                x.big_int.as_ref().and_then(|y| match y {
+                    utxorpc_spec::utxorpc::v1alpha::cardano::big_int::BigInt::Int(z) => {
+                        Some(*z as u64)
+                    }
+                    _ => None,
+                })
+            })
+            .ok_or(BuildError::LedgerError(
+                "Missing coins_per_utxo_byte protocol parameter".to_string(),
+            ))?;
+        let min_lovelace = (160u64 + serialized.len() as u64) * coins_per_utxo_byte;
         let current_value = match parent {
             conway::PseudoTransactionOutput::PostAlonzo(x) => &x.value,
             _ => unimplemented!(),

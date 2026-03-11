@@ -290,6 +290,7 @@ impl Block {
                 slot: block.header.as_ref().unwrap().slot,
                 hash: block.header.as_ref().unwrap().hash.clone(),
                 height: block.header.as_ref().unwrap().height,
+                timestamp: block.timestamp,
             }),
         }
     }
