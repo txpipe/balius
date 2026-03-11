@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-use balius_runtime::{drivers, ledgers, sign::in_memory::SignerKey, Runtime, Store};
+use balius_runtime::{
+    drivers, ledgers, sign::in_memory::SignerKey, store::redb::Store as RedbStore, Runtime, Store,
+};
 use boilerplate::{init_meter_provider, metrics_server};
 use clap::{Parser, Subcommand};
 use config::SignerConfig;
@@ -60,10 +62,10 @@ async fn daemon(debug: bool) -> miette::Result<()> {
     boilerplate::setup_tracing(&config.logging).unwrap();
 
     let mut store = match config.store.as_ref() {
-        Some(cfg) => Store::open(cfg.path.clone(), None)
+        Some(cfg) => RedbStore::open(cfg.path.clone(), None)
             .into_diagnostic()
             .context("opening store")?,
-        None => Store::in_memory()
+        None => RedbStore::in_memory()
             .into_diagnostic()
             .context("opening in memory store")?,
     };
@@ -92,7 +94,7 @@ async fn daemon(debug: bool) -> miette::Result<()> {
             .context("converting kv into ephemeral")?;
     }
 
-    let runtime = Runtime::builder(store)
+    let runtime = Runtime::builder(Store::Redb(store))
         .with_ledger(ledger.into())
         .with_kv(kv)
         .with_logger((&config).into())
