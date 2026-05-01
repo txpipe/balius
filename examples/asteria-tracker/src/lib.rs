@@ -1,3 +1,5 @@
+use balius_proto::cardano::plutus_data::{self};
+use balius_proto::cardano::{big_int, PlutusData};
 use balius_sdk::http::{AsHeader, HttpRequest};
 use balius_sdk::wit::balius::app as worker;
 use balius_sdk::{self as sdk};
@@ -11,6 +13,31 @@ struct Config {
     spacetime_hex_address: String,
     ship_policy: String,
     fuel_policy: String,
+}
+
+fn string_plutus_field(p: Option<&PlutusData>) -> Option<Vec<u8>> {
+    match p {
+        Some(x) => match x.plutus_data.clone() {
+            Some(plutus_data::PlutusData::BoundedBytes(x)) => Some(x.to_vec()),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn integer_plutus_field(p: Option<&PlutusData>) -> Option<i64> {
+    match p {
+        Some(x) => match x.plutus_data.clone() {
+            Some(plutus_data::PlutusData::BigInt(x)) => match x.big_int {
+                Some(big_int::BigInt::Int(x)) => Some(x),
+                Some(big_int::BigInt::BigUInt(_)) => None,
+                Some(big_int::BigInt::BigNInt(_)) => None,
+                _ => None,
+            },
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -32,49 +59,75 @@ fn handle_utxo(config: sdk::Config<Config>, utxo: sdk::Utxo<Datum>) -> sdk::Work
     let utxo_addr = hex::encode(utxo.utxo.address.into_bytes());
 
     if utxo_addr == config.spacetime_hex_address {
-        // ship name + fuel are derived from the multiasset list. Position is
-        // intentionally not tracked here — it lives in the datum, which is
-        // outside the minimal balius-proto schema.
+        // check UTxO validity and obtain fuel amount
         let mut is_valid: bool = false;
         let mut fuel: u64 = 0;
-        let mut asset_name = String::new();
-        for masset in &utxo.utxo.assets {
-            let masset_policy = hex::encode(masset.policy_id.clone().into_bytes());
+        let massets = utxo.utxo.assets;
+        for masset in &massets {
+            // masset has type Multiasset (balius_proto)
+            let masset_policy = hex::encode(masset.policy_id.into_bytes());
             if masset_policy == config.ship_policy {
                 is_valid = true;
-                if let Some(asset) = masset.assets.first() {
-                    asset_name = hex::encode(asset.name.clone().into_bytes());
-                }
             } else if masset_policy == config.fuel_policy {
-                if let Some(asset) = masset.assets.first() {
-                    fuel = asset.output_coin;
-                }
+                // asset has type Asset (balius_proto)
+                let asset = masset.assets.first().unwrap();
+                fuel = asset.output_coin;
             }
         }
 
-        if !is_valid || asset_name.is_empty() {
+        if !is_valid {
             worker::logging::log(worker::logging::Level::Debug, "Invalid UTxO", &out_ref);
             return Ok(());
+        }
+
+        // manually parse datum to obtain ship name and position
+        let mut pos_x = 0;
+        let mut pos_y = 0;
+        let mut asset_name = String::new();
+        if let Some(datum) = utxo.utxo.datum {
+            let p = datum.payload.unwrap().plutus_data.unwrap();
+
+            if let plutus_data::PlutusData::Constr(x) = p {
+                let mut f = x.fields.iter();
+
+                pos_x = integer_plutus_field(f.next()).unwrap();
+                pos_y = integer_plutus_field(f.next()).unwrap();
+                asset_name = hex::encode(string_plutus_field(f.next()).unwrap());
+            }
         }
 
         // find out operation: create ship, move ship or gather fuel
         let prev_fuel_res = worker::kv::get_value(&format!("{asset_name}-fuel"));
         let operation = match prev_fuel_res {
             Ok(prev_fuel_bytes) => {
+                // this is an existing ship
+                // did it move or gather fuel?
                 let prev_fuel_str: String = String::from_utf8(prev_fuel_bytes).unwrap();
                 let prev_fuel: u64 = prev_fuel_str.parse().unwrap();
                 if fuel < prev_fuel {
+                    // it consumed fuel, so it moved
                     Operation::MoveShip
                 } else {
+                    // it gathered fuel
                     Operation::GatherFuel
                 }
             }
-            Err(_err) => Operation::CreateShip,
+            Err(_err) => {
+                // this is a new ship (at least in the storage)
+                Operation::CreateShip
+            }
         };
 
+        // save ship information in storage
+        let pos_x_str = pos_x.to_string();
+        let pos_y_str = pos_y.to_string();
         let fuel_str = fuel.to_string();
+
+        let _ = worker::kv::set_value(&format!("{asset_name}-pos_x"), pos_x_str.as_bytes());
+        let _ = worker::kv::set_value(&format!("{asset_name}-pos_y"), pos_y_str.as_bytes());
         let _ = worker::kv::set_value(&format!("{asset_name}-fuel"), fuel_str.as_bytes());
 
+        // send notification
         let url = Url::parse(&config.discord_webhook).unwrap();
         let asset_name = String::from_utf8(hex::decode(asset_name).unwrap()).unwrap();
         let header = match operation {
@@ -83,12 +136,15 @@ fn handle_utxo(config: sdk::Config<Config>, utxo: sdk::Utxo<Datum>) -> sdk::Work
             Operation::GatherFuel => format!("🚀 **{asset_name}** just gathered fuel!"),
         };
         let payload = json!({
-            "content": format!("{header}\n⛽ Fuel left: {fuel_str}")
+            "content":
+                format!(
+                    "{header}\n📍 Position: ({pos_x_str}, {pos_y_str})\n⛽ Fuel left: {fuel_str}"
+                )
         });
         worker::logging::log(
             worker::logging::Level::Debug,
             &format!("UTxO {}:", &out_ref),
-            &format!("{operation:#?} - {fuel_str}"),
+            &format!("{operation:#?} - {pos_x_str} - {pos_y_str} - {fuel_str}"),
         );
 
         let _ = HttpRequest::post(url).json(&payload)?.send()?;

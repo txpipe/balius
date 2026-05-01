@@ -25,6 +25,15 @@ fn wire_compat_tx_output_roundtrips_via_017() {
                 output_coin: 5,
             }],
         }],
+        datum: Some(legacy::Datum {
+            hash: vec![0xEE; 32].into(),
+            payload: Some(legacy::PlutusData {
+                plutus_data: Some(legacy::plutus_data::PlutusData::BoundedBytes(
+                    b"datum-payload".to_vec().into(),
+                )),
+            }),
+            original_cbor: vec![0xFF; 8].into(),
+        }),
     };
 
     let bytes = bal.encode_to_vec();
@@ -35,8 +44,10 @@ fn wire_compat_tx_output_roundtrips_via_017() {
     assert_eq!(decoded.assets.len(), 1);
     assert_eq!(decoded.assets[0].assets[0].output_coin, 5);
     assert_eq!(decoded.assets[0].assets[0].name.to_vec(), b"hello".to_vec());
-    // Dropped tags appear as defaults on the decoder side:
-    assert!(decoded.datum.is_none());
+    let datum = decoded.datum.as_ref().expect("datum present");
+    assert_eq!(datum.hash.to_vec(), vec![0xEE; 32]);
+    assert_eq!(datum.original_cbor.to_vec(), vec![0xFF; 8]);
+    // Dropped TxOutput tags decode as defaults:
     assert!(decoded.script.is_none());
 }
 
@@ -49,6 +60,14 @@ fn wire_compat_tx_roundtrips_via_017() {
             as_output: None,
         }],
         outputs: vec![],
+        witnesses: Some(legacy::WitnessSet {
+            vkeywitness: vec![legacy::VKeyWitness {
+                vkey: vec![0x11; 32].into(),
+                signature: vec![0x22; 64].into(),
+            }],
+            script: vec![],
+            plutus_datums: vec![],
+        }),
         fee: 1234,
         hash: vec![0xCC; 32].into(),
     };
@@ -58,6 +77,10 @@ fn wire_compat_tx_roundtrips_via_017() {
     assert_eq!(decoded.inputs[0].output_index, 1);
     assert_eq!(decoded.fee, 1234);
     assert_eq!(decoded.hash.to_vec(), vec![0xCC; 32]);
+    let witnesses = decoded.witnesses.as_ref().expect("witnesses present");
+    assert_eq!(witnesses.vkeywitness.len(), 1);
+    assert_eq!(witnesses.vkeywitness[0].vkey.to_vec(), vec![0x11; 32]);
+    assert_eq!(witnesses.vkeywitness[0].signature.to_vec(), vec![0x22; 64]);
     // Dropped tags decode as defaults:
     assert!(decoded.certificates.is_empty());
     assert!(decoded.withdrawals.is_empty());

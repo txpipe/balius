@@ -11,6 +11,9 @@ pub enum ConvertError {
     /// BigInt is `BigUInt`/`BigNInt`, or `Int(v)` doesn't fit the legacy
     /// uint64/int64 target. Halts the worker per design.
     Overflow,
+    /// Re-decoding a wire-stable type with the legacy schema failed —
+    /// indicates a wire-format assumption is wrong.
+    Decode(prost::DecodeError),
 }
 
 impl std::fmt::Display for ConvertError {
@@ -19,11 +22,18 @@ impl std::fmt::Display for ConvertError {
             ConvertError::Overflow => {
                 write!(f, "BigInt value out of range for legacy uint64/int64 target")
             }
+            ConvertError::Decode(e) => write!(f, "wire-stable roundtrip decode failed: {e}"),
         }
     }
 }
 
 impl std::error::Error for ConvertError {}
+
+impl From<prost::DecodeError> for ConvertError {
+    fn from(e: prost::DecodeError) -> Self {
+        ConvertError::Decode(e)
+    }
+}
 
 fn unwrap_u64(b: Option<&upstream::BigInt>) -> Result<u64, ConvertError> {
     match b.and_then(|x| x.big_int.as_ref()) {
@@ -38,6 +48,27 @@ where
     F: Fn(U) -> Result<L, ConvertError>,
 {
     items.into_iter().map(f).collect()
+}
+
+/// Re-encodes a wire-stable type via prost roundtrip into its legacy
+/// counterpart. Only safe when the upstream and legacy types share an
+/// identical wire format — used here for `Datum` and `WitnessSet`,
+/// which didn't change between 0.17 and 0.18.
+fn roundtrip<U, L>(u: &U) -> Result<L, ConvertError>
+where
+    U: prost::Message,
+    L: prost::Message + Default,
+{
+    let bytes = u.encode_to_vec();
+    L::decode(bytes.as_slice()).map_err(ConvertError::from)
+}
+
+fn roundtrip_opt<U, L>(u: &Option<U>) -> Result<Option<L>, ConvertError>
+where
+    U: prost::Message,
+    L: prost::Message + Default,
+{
+    u.as_ref().map(roundtrip).transpose()
 }
 
 impl TryFrom<upstream::Asset> for legacy::Asset {
@@ -74,6 +105,7 @@ impl TryFrom<upstream::TxOutput> for legacy::TxOutput {
             address: o.address,
             coin: unwrap_u64(o.coin.as_ref())?,
             assets: try_map(o.assets, legacy::Multiasset::try_from)?,
+            datum: roundtrip_opt(&o.datum)?,
         })
     }
 }
@@ -97,6 +129,7 @@ impl TryFrom<upstream::Tx> for legacy::Tx {
         Ok(legacy::Tx {
             inputs: try_map(t.inputs, legacy::TxInput::try_from)?,
             outputs: try_map(t.outputs, legacy::TxOutput::try_from)?,
+            witnesses: roundtrip_opt(&t.witnesses)?,
             fee: unwrap_u64(t.fee.as_ref())?,
             hash: t.hash,
         })
