@@ -51,7 +51,7 @@ use std::sync::Arc;
 
 pub use pallas_codec as codec;
 pub use pallas_primitives::conway as primitives;
-pub use utxorpc_spec::utxorpc::v1alpha::cardano::PParams;
+pub use balius_proto::cardano::PParams;
 
 pub trait Ledger {
     fn read_utxos(&self, refs: &[dsl::TxoRef]) -> Result<dsl::UtxoSet, BuildError>;

@@ -1,0 +1,24 @@
+[package]
+name = "balius-proto"
+version = "0.5.2"
+edition = "2021"
+
+description = "Balius-owned protobuf schema for the runtime <-> WASM interface"
+license = "Apache-2.0"
+repository = "https://github.com/txpipe/balius"
+
+[dependencies]
+prost = "0.13"
+bytes = "1"
+serde = { version = "1", features = ["derive"] }
+pbjson = "0.7"
+pbjson-types = "0.7"
+utxorpc-spec = { version = "0.18.1", features = ["ledgers"], default-features = false, optional = true }
+
+[features]
+default = []
+convert = ["dep:utxorpc-spec"]
+
+[dev-dependencies]
+utxorpc-spec_017 = { package = "utxorpc-spec", version = "0.17.0", features = ["ledgers"], default-features = false }
+utxorpc-spec = { version = "0.18.1", features = ["ledgers"], default-features = false }

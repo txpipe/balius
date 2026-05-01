@@ -82,6 +82,15 @@ pub enum Error {
 
     #[error("kv error {0}")]
     KvError(String),
+
+    #[error("u5c -> balius_proto conversion error: {0}")]
+    Convert(balius_proto::convert::ConvertError),
+}
+
+impl From<balius_proto::convert::ConvertError> for Error {
+    fn from(value: balius_proto::convert::ConvertError) -> Self {
+        Self::Convert(value)
+    }
 }
 
 impl From<wasmtime::Error> for Error {
@@ -176,7 +185,7 @@ impl ChainPoint {
 pub type LogSeq = u64;
 
 pub enum TxInput {
-    Cardano(utxorpc::spec::cardano::TxInput),
+    Cardano(balius_proto::cardano::TxInput),
 }
 
 impl TxInput {
@@ -196,7 +205,7 @@ impl TxInput {
 }
 
 pub enum Utxo {
-    Cardano(utxorpc::spec::cardano::TxOutput),
+    Cardano(balius_proto::cardano::TxOutput),
 }
 
 impl Utxo {
@@ -216,7 +225,7 @@ impl Utxo {
 }
 
 pub enum Tx {
-    Cardano(utxorpc::spec::cardano::Tx),
+    Cardano(balius_proto::cardano::Tx),
 }
 
 impl Tx {
@@ -254,7 +263,7 @@ impl Tx {
 
 #[derive(Debug, Clone)]
 pub enum Block {
-    Cardano(utxorpc::spec::cardano::Block),
+    Cardano(balius_proto::cardano::Block),
 }
 
 impl Block {
@@ -306,7 +315,7 @@ impl Block {
     pub fn from_bytes(data: &[u8]) -> Self {
         use prost::Message;
 
-        Self::Cardano(utxorpc::spec::cardano::Block::decode(data).unwrap())
+        Self::Cardano(balius_proto::cardano::Block::decode(data).unwrap())
     }
 }
 
