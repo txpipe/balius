@@ -45,11 +45,11 @@ async fn gather_blocks(
 
         match event {
             Some(utxorpc::TipEvent::Apply(chain_block)) => {
-                let next = Block::Cardano(chain_block.parsed.unwrap().try_into()?);
+                let next = Block::Cardano(chain_block.parsed.unwrap());
                 break Ok((next, undos));
             }
             Some(utxorpc::TipEvent::Undo(chain_block)) => {
-                undos.push(Block::Cardano(chain_block.parsed.unwrap().try_into()?));
+                undos.push(Block::Cardano(chain_block.parsed.unwrap()));
             }
             Some(utxorpc::TipEvent::Reset(block_ref)) => {
                 tracing::warn!(block_ref =? &block_ref, "received reset event, reseting tip");

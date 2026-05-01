@@ -10,9 +10,6 @@ repository = "https://github.com/txpipe/balius"
 [dependencies]
 prost = "0.13"
 bytes = "1"
-serde = { version = "1", features = ["derive"] }
-pbjson = "0.7"
-pbjson-types = "0.7"
 utxorpc-spec = { version = "0.18.1", features = ["ledgers"], default-features = false, optional = true }
 
 [features]

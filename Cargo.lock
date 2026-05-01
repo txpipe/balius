@@ -113,7 +113,6 @@ checksum = "dde20b3d026af13f561bdd0f15edf01fc734f0dafcedbaf42bba506a9517f223"
 name = "asteria-tracker"
 version = "0.0.1"
 dependencies = [
- "balius-proto",
  "balius-sdk",
  "hex",
  "serde",
@@ -265,10 +264,7 @@ name = "balius-proto"
 version = "0.5.2"
 dependencies = [
  "bytes",
- "pbjson",
- "pbjson-types",
  "prost",
- "serde",
  "utxorpc-spec 0.17.0",
  "utxorpc-spec 0.18.1",
 ]

@@ -263,7 +263,7 @@ impl Tx {
 
 #[derive(Debug, Clone)]
 pub enum Block {
-    Cardano(balius_proto::cardano::Block),
+    Cardano(utxorpc::spec::cardano::Block),
 }
 
 impl Block {
@@ -282,13 +282,14 @@ impl Block {
             Self::Cardano(block) => block.header.as_ref().unwrap().slot,
         }
     }
-    pub fn txs(&self) -> Vec<Tx> {
+    pub fn txs(&self) -> Result<Vec<Tx>, Error> {
         match self {
             Self::Cardano(block) => block
                 .body
                 .iter()
                 .flat_map(|b| b.tx.iter())
-                .map(|t| Tx::Cardano(t.clone()))
+                .cloned()
+                .map(|t| t.try_into().map(Tx::Cardano).map_err(Error::from))
                 .collect(),
         }
     }
@@ -315,7 +316,7 @@ impl Block {
     pub fn from_bytes(data: &[u8]) -> Self {
         use prost::Message;
 
-        Self::Cardano(balius_proto::cardano::Block::decode(data).unwrap())
+        Self::Cardano(utxorpc::spec::cardano::Block::decode(data).unwrap())
     }
 }
 
@@ -388,7 +389,7 @@ impl LoadedWorker {
         let block_hash = block.hash();
         let block_height = block.height();
         let block_slot = block.slot();
-        for tx in block.txs() {
+        for tx in block.txs()? {
             let tx_hash = tx.hash();
             let channels = self.wasm_store.data().router.find_tx_targets(&tx);
             if !channels.is_empty() {
@@ -441,7 +442,7 @@ impl LoadedWorker {
         let block_hash = block.hash();
         let block_height = block.height();
         let block_slot = block.slot();
-        for tx in block.txs() {
+        for tx in block.txs()? {
             let tx_hash = tx.hash();
             for (index, utxo) in tx.outputs().into_iter().enumerate().rev() {
                 let channels = self.wasm_store.data().router.find_utxo_targets(&utxo);

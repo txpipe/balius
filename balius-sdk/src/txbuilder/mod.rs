@@ -51,7 +51,14 @@ use std::sync::Arc;
 
 pub use pallas_codec as codec;
 pub use pallas_primitives::conway as primitives;
-pub use balius_proto::cardano::PParams;
+
+/// Minimal protocol parameters surface the SDK needs for tx-building.
+/// The runtime serializes this exact shape over `read-params`; if you
+/// need more fields, add them here and update `u5c.rs::read_params`.
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct PParams {
+    pub coins_per_utxo_byte: u64,
+}
 
 pub trait Ledger {
     fn read_utxos(&self, refs: &[dsl::TxoRef]) -> Result<dsl::UtxoSet, BuildError>;

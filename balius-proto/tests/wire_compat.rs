@@ -1,10 +1,9 @@
 //! Wire-compat + conversion tests for balius_proto.
 //!
-//! The whole point of `balius-proto` is that bytes produced from
-//! `balius_proto::cardano::*` are byte-identical to bytes that
-//! `utxorpc-spec 0.17.0` would have produced for the same logical value.
-//! These tests prove that, and also prove that the converter from
-//! upstream 0.18.x types yields equivalent legacy bytes.
+//! Bytes produced from `balius_proto::cardano::*` must decode 1:1 under
+//! `utxorpc-spec 0.17.0`. Tags absent from balius_proto are simply not
+//! emitted; old SDKs see the missing fields as default-valued, which is
+//! the deliberate trade-off of the trimmed schema.
 //!
 //! Run convert-feature tests with:
 //!   cargo test -p balius-proto --features convert
@@ -24,12 +23,8 @@ fn wire_compat_tx_output_roundtrips_via_017() {
             assets: vec![legacy::Asset {
                 name: b"hello".to_vec().into(),
                 output_coin: 5,
-                mint_coin: 0,
             }],
-            redeemer: None,
         }],
-        datum: None,
-        script: None,
     };
 
     let bytes = bal.encode_to_vec();
@@ -40,31 +35,34 @@ fn wire_compat_tx_output_roundtrips_via_017() {
     assert_eq!(decoded.assets.len(), 1);
     assert_eq!(decoded.assets[0].assets[0].output_coin, 5);
     assert_eq!(decoded.assets[0].assets[0].name.to_vec(), b"hello".to_vec());
+    // Dropped tags appear as defaults on the decoder side:
+    assert!(decoded.datum.is_none());
+    assert!(decoded.script.is_none());
 }
 
 #[test]
 fn wire_compat_tx_roundtrips_via_017() {
     let bal = legacy::Tx {
-        inputs: vec![],
+        inputs: vec![legacy::TxInput {
+            tx_hash: vec![0xDD; 32].into(),
+            output_index: 1,
+            as_output: None,
+        }],
         outputs: vec![],
-        certificates: vec![],
-        withdrawals: vec![],
-        mint: vec![],
-        reference_inputs: vec![],
-        witnesses: None,
-        collateral: None,
         fee: 1234,
-        validity: None,
-        successful: true,
-        auxiliary: None,
         hash: vec![0xCC; 32].into(),
-        proposals: vec![],
     };
     let bytes = bal.encode_to_vec();
     let decoded = v17::Tx::decode(bytes.as_slice()).expect("decode 0.17.0");
+    assert_eq!(decoded.inputs.len(), 1);
+    assert_eq!(decoded.inputs[0].output_index, 1);
     assert_eq!(decoded.fee, 1234);
-    assert!(decoded.successful);
     assert_eq!(decoded.hash.to_vec(), vec![0xCC; 32]);
+    // Dropped tags decode as defaults:
+    assert!(decoded.certificates.is_empty());
+    assert!(decoded.withdrawals.is_empty());
+    assert!(decoded.proposals.is_empty());
+    assert!(!decoded.successful);
 }
 
 #[cfg(feature = "convert")]
@@ -96,7 +94,6 @@ mod convert {
         let bal: legacy::TxOutput = upstream.try_into().expect("convert");
         assert_eq!(bal.coin, 42);
         assert_eq!(bal.assets[0].assets[0].output_coin, 7);
-        assert_eq!(bal.assets[0].assets[0].mint_coin, 0);
     }
 
     #[test]
@@ -141,13 +138,11 @@ mod convert {
             fee: Some(v18::BigInt {
                 big_int: Some(v18::big_int::BigInt::Int(9999)),
             }),
-            successful: true,
             hash: vec![0xCC; 32].into(),
             ..Default::default()
         };
         let bal: legacy::Tx = upstream.try_into().expect("convert");
         assert_eq!(bal.fee, 9999);
-        assert!(bal.successful);
         assert_eq!(bal.hash.to_vec(), vec![0xCC; 32]);
     }
 
