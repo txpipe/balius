@@ -1,5 +1,5 @@
-use balius_proto::cardano::plutus_data::{self};
-use balius_proto::cardano::{big_int, PlutusData};
+use balius_core::proto::v0::cardano::plutus_data::{self};
+use balius_core::proto::v0::cardano::{big_int, PlutusData};
 use balius_sdk::http::{AsHeader, HttpRequest};
 use balius_sdk::wit::balius::app as worker;
 use balius_sdk::{self as sdk};
@@ -64,12 +64,12 @@ fn handle_utxo(config: sdk::Config<Config>, utxo: sdk::Utxo<Datum>) -> sdk::Work
         let mut fuel: u64 = 0;
         let massets = utxo.utxo.assets;
         for masset in &massets {
-            // masset has type Multiasset (balius_proto)
+            // masset has type Multiasset (balius_core)
             let masset_policy = hex::encode(masset.policy_id.into_bytes());
             if masset_policy == config.ship_policy {
                 is_valid = true;
             } else if masset_policy == config.fuel_policy {
-                // asset has type Asset (balius_proto)
+                // asset has type Asset (balius_core)
                 let asset = masset.assets.first().unwrap();
                 fuel = asset.output_coin;
             }

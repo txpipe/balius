@@ -113,7 +113,7 @@ checksum = "dde20b3d026af13f561bdd0f15edf01fc734f0dafcedbaf42bba506a9517f223"
 name = "asteria-tracker"
 version = "0.0.1"
 dependencies = [
- "balius-proto",
+ "balius-core",
  "balius-sdk",
  "hex",
  "serde",
@@ -253,15 +253,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "balius-macros"
-version = "0.5.2"
-dependencies = [
- "quote",
- "syn",
-]
-
-[[package]]
-name = "balius-proto"
+name = "balius-core"
 version = "0.5.2"
 dependencies = [
  "bytes",
@@ -270,11 +262,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "balius-macros"
+version = "0.5.2"
+dependencies = [
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "balius-runtime"
 version = "0.5.2"
 dependencies = [
  "async-trait",
- "balius-proto",
+ "balius-core",
  "chrono",
  "flate2",
  "futures",
@@ -307,8 +307,8 @@ dependencies = [
 name = "balius-sdk"
 version = "0.5.2"
 dependencies = [
+ "balius-core",
  "balius-macros",
- "balius-proto",
  "hex",
  "pallas-addresses",
  "pallas-codec",

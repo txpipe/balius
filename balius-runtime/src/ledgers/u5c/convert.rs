@@ -1,19 +1,20 @@
-//! u5c -> balius_proto conversion.
+//! u5c -> balius_core::proto::v0 conversion.
 //!
-//! Lives in the u5c adapter, not in balius-proto: the schema crate must
+//! Lives in the u5c adapter, not in balius-core: the schema crate must
 //! not be coupled to any upstream service. Used at chainsync ingress
 //! (`lib.rs::Block::txs`) and at ledger reads (`super::chain_utxo_to_wit`
 //! / `super::Ledger::read_params`).
 //!
 //! Two flavors of output:
 //!  - Tx/UTxO/etc. travel as **prost bytes** — `convert_*` functions
-//!    produce `balius_proto::cardano::*` values, whose wire format mirrors
-//!    `utxorpc-spec 0.17` so pre-BigInt workers decode them unchanged.
+//!    produce `balius_core::proto::v0::cardano::*` values, whose wire
+//!    format mirrors `utxorpc-spec 0.17` so pre-BigInt workers decode
+//!    them unchanged.
 //!  - PParams travels as **JSON** — `pparams_to_legacy_json` emits exactly
 //!    what `utxorpc-spec 0.17`'s pbjson serializer would produce, so the
 //!    same pre-BigInt workers' pbjson decoder reads it unchanged.
 
-use balius_proto::cardano as legacy;
+use balius_core::proto::v0::cardano as legacy;
 use utxorpc::spec::cardano as upstream;
 
 #[derive(Debug)]
@@ -311,7 +312,7 @@ pub fn pparams_to_legacy_json(
 
 #[cfg(test)]
 mod tests {
-    //! u5c -> balius_proto conversion tests.
+    //! u5c -> balius_core::proto::v0 conversion tests.
     //!
     //! The load-bearing invariants tested here are:
     //!  - Bytes produced by `convert_*` decode unchanged under

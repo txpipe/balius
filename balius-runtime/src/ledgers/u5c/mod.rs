@@ -46,7 +46,7 @@ fn chain_utxo_to_wit(
         .parsed
         .map(convert::convert_tx_output)
         .transpose()
-        .map_err(|e| wit::LedgerError::Upstream(format!("u5c -> balius_proto conversion: {e}")))?
+        .map_err(|e| wit::LedgerError::Upstream(format!("u5c -> balius_core conversion: {e}")))?
         .map(|t| t.encode_to_vec())
         .unwrap_or_default();
 

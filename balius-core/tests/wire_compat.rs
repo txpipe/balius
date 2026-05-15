@@ -1,17 +1,17 @@
-//! Wire-compat invariant for balius_proto.
+//! Wire-compat invariant for balius_core::proto::v0.
 //!
-//! Bytes produced from `balius_proto::cardano::*` must decode 1:1 under
-//! `utxorpc-spec 0.17.0`. Tags absent from balius_proto are simply not
-//! emitted; old SDKs see the missing fields as default-valued, which is
-//! the deliberate trade-off of the trimmed schema.
+//! Bytes produced from `balius_core::proto::v0::cardano::*` must decode
+//! 1:1 under `utxorpc-spec 0.17.0`. Tags absent from the schema are
+//! simply not emitted; old SDKs see the missing fields as default-valued,
+//! which is the deliberate trade-off of the trimmed schema.
 //!
 //! Conversion from upstream u5c into this schema lives in the runtime's
-//! u5c adapter (see `balius-runtime/tests/u5c_convert.rs`) — balius-proto
+//! u5c adapter (`balius-runtime/src/ledgers/u5c/convert.rs`) — balius-core
 //! itself stays decoupled from any upstream service.
 
 use prost::Message;
 
-use balius_proto::cardano as legacy;
+use balius_core::proto::v0::cardano as legacy;
 use utxorpc_spec_017::utxorpc::v1alpha::cardano as v17;
 
 #[test]

@@ -277,7 +277,7 @@ pub struct Utxo<D> {
     pub block_slot: u64,
     pub tx_hash: Vec<u8>,
     pub index: u64,
-    pub utxo: balius_proto::cardano::TxOutput,
+    pub utxo: balius_core::proto::v0::cardano::TxOutput,
     pub datum: Option<D>,
 }
 
@@ -323,7 +323,7 @@ pub struct Tx {
     pub block_height: u64,
     pub block_slot: u64,
     pub hash: Vec<u8>,
-    pub tx: balius_proto::cardano::Tx,
+    pub tx: balius_core::proto::v0::cardano::Tx,
 }
 
 impl TryFrom<wit::Event> for Tx {

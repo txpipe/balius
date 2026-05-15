@@ -83,7 +83,7 @@ pub enum Error {
     #[error("kv error {0}")]
     KvError(String),
 
-    #[error("u5c -> balius_proto conversion error: {0}")]
+    #[error("u5c -> balius_core conversion error: {0}")]
     Convert(ledgers::u5c::convert::ConvertError),
 }
 
@@ -185,7 +185,7 @@ impl ChainPoint {
 pub type LogSeq = u64;
 
 pub enum TxInput {
-    Cardano(balius_proto::cardano::TxInput),
+    Cardano(balius_core::proto::v0::cardano::TxInput),
 }
 
 impl TxInput {
@@ -205,7 +205,7 @@ impl TxInput {
 }
 
 pub enum Utxo {
-    Cardano(balius_proto::cardano::TxOutput),
+    Cardano(balius_core::proto::v0::cardano::TxOutput),
 }
 
 impl Utxo {
@@ -225,7 +225,7 @@ impl Utxo {
 }
 
 pub enum Tx {
-    Cardano(balius_proto::cardano::Tx),
+    Cardano(balius_core::proto::v0::cardano::Tx),
 }
 
 impl Tx {

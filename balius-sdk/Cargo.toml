@@ -9,7 +9,7 @@ repository = "https://github.com/txpipe/balius"
 readme = "README.md"
 
 [dependencies]
-balius-proto = { version = "0.5.2", path = "../balius-proto" }
+balius-core = { version = "0.5.2", path = "../balius-core" }
 balius-macros = { version = "0.5.2", path = "../balius-macros" }
 hex = "0.4.3"
 pallas-addresses = { version = "0.32.0" }
