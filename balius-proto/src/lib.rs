@@ -3,6 +3,3 @@
 // these bytes unchanged.
 
 pub mod cardano;
-
-#[cfg(feature = "convert")]
-pub mod convert;

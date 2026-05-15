@@ -10,13 +10,6 @@ repository = "https://github.com/txpipe/balius"
 [dependencies]
 prost = "0.13"
 bytes = "1"
-utxorpc-spec = { version = "0.18.1", features = ["ledgers"], default-features = false, optional = true }
-serde_json = { version = "1.0", optional = true }
-
-[features]
-default = []
-convert = ["dep:utxorpc-spec", "dep:serde_json"]
 
 [dev-dependencies]
 utxorpc-spec_017 = { package = "utxorpc-spec", version = "0.17.0", features = ["ledgers"], default-features = false }
-utxorpc-spec = { version = "0.18.1", features = ["ledgers"], default-features = false }

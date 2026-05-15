@@ -266,9 +266,7 @@ version = "0.5.2"
 dependencies = [
  "bytes",
  "prost",
- "serde_json",
  "utxorpc-spec 0.17.0",
- "utxorpc-spec 0.18.1",
 ]
 
 [[package]]
@@ -298,6 +296,7 @@ dependencies = [
  "tracing",
  "url",
  "utxorpc",
+ "utxorpc-spec 0.17.0",
  "warp",
  "wasmtime",
  "wat",
