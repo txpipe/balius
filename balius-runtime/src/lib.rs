@@ -84,11 +84,11 @@ pub enum Error {
     KvError(String),
 
     #[error("u5c -> balius_proto conversion error: {0}")]
-    Convert(ledgers::u5c::ConvertError),
+    Convert(ledgers::u5c::convert::ConvertError),
 }
 
-impl From<ledgers::u5c::ConvertError> for Error {
-    fn from(value: ledgers::u5c::ConvertError) -> Self {
+impl From<ledgers::u5c::convert::ConvertError> for Error {
+    fn from(value: ledgers::u5c::convert::ConvertError) -> Self {
         Self::Convert(value)
     }
 }
@@ -290,7 +290,7 @@ impl Block {
                 .flat_map(|b| b.tx.iter())
                 .cloned()
                 .map(|t| {
-                    ledgers::u5c::convert_tx(t)
+                    ledgers::u5c::convert::convert_tx(t)
                         .map(Tx::Cardano)
                         .map_err(Error::from)
                 })
