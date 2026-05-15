@@ -52,11 +52,21 @@ use std::sync::Arc;
 pub use pallas_codec as codec;
 pub use pallas_primitives::conway as primitives;
 
-/// Minimal protocol parameters surface the SDK needs for tx-building.
-/// The runtime serializes this exact shape over `read-params`; if you
-/// need more fields, add them here and update `u5c.rs::read_params`.
-#[derive(Clone, Debug, serde::Deserialize)]
+/// Protocol parameters surface the SDK currently consumes for tx-building.
+///
+/// `read-params` hands over the JSON shape that utxorpc-spec 0.17's
+/// pbjson serializer produces (camelCase keys, u64s as strings). Workers
+/// built against pre-BigInt SDKs deserialize the same payload unchanged
+/// via their own pbjson decoder — that is the ABI we are preserving.
+///
+/// Add fields here as they become needed; serde ignores anything the
+/// runtime emits that we don't read.
+#[serde_with::serde_as]
+#[derive(Clone, Debug, Default, serde::Deserialize)]
+#[serde(default)]
 pub struct PParams {
+    #[serde_as(as = "serde_with::DisplayFromStr")]
+    #[serde(rename = "coinsPerUtxoByte")]
     pub coins_per_utxo_byte: u64,
 }
 

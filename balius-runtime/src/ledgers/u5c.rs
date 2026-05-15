@@ -151,16 +151,14 @@ impl Ledger {
         ))?;
         match params {
             utxorpc::spec::query::any_chain_params::Params::Cardano(params) => {
-                let coins_per_utxo_byte = balius_proto::convert::coins_per_utxo_byte(&params)
-                    .map_err(|e| {
+                let json = balius_proto::convert::pparams_to_legacy_json(&params).map_err(
+                    |e| {
                         wit::LedgerError::Upstream(format!(
                             "u5c -> balius pparams conversion: {e}"
                         ))
-                    })?;
-                Ok(serde_json::to_vec(&serde_json::json!({
-                    "coins_per_utxo_byte": coins_per_utxo_byte,
-                }))
-                .unwrap())
+                    },
+                )?;
+                Ok(serde_json::to_vec(&json).unwrap())
             }
             #[allow(unreachable_patterns)]
             _ => Err(wit::LedgerError::Upstream(
