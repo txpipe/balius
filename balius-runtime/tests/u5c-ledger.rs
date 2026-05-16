@@ -1,17 +1,18 @@
 #![cfg(test)]
 
-use balius_runtime::{ledgers, Runtime, Store};
+use balius_runtime::{ledgers, store::redb::Store as RedbStore, Runtime, Store};
 use serde_json::json;
 use std::collections::HashMap;
 
 #[tokio::test]
 async fn faucet_claim() {
-    let store = Store::open("tests/balius.db", None).unwrap();
+    let store = Store::Redb(RedbStore::open("tests/balius.db", None).unwrap());
     let ledger = ledgers::u5c::Ledger::new(&ledgers::u5c::Config {
         endpoint_url: "https://mainnet.utxorpc-v0.demeter.run".to_string(),
-        headers: Some(HashMap::from([
-            ("api-key".to_string(), "dmtr_utxorpc1wgnnj0qcfj32zxsz2uc8d4g7uclm2s2w".to_string()),
-        ])),
+        headers: Some(HashMap::from([(
+            "api-key".to_string(),
+            "dmtr_utxorpc1wgnnj0qcfj32zxsz2uc8d4g7uclm2s2w".to_string(),
+        )])),
     })
     .await
     .unwrap();
