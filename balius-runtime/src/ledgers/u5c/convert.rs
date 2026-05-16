@@ -50,8 +50,30 @@ fn unwrap_u64(b: Option<&upstream::BigInt>) -> Result<u64, ConvertError> {
     match b.and_then(|x| x.big_int.as_ref()) {
         None => Ok(0),
         Some(upstream::big_int::BigInt::Int(v)) if *v >= 0 => Ok(*v as u64),
+        Some(upstream::big_int::BigInt::BigUInt(bytes)) => big_uint_to_u64(bytes),
         _ => Err(ConvertError::Overflow),
     }
+}
+
+/// Decode u5c's `BigUInt` (big-endian unsigned bytes) into a `u64`.
+/// Returns `Overflow` only when the value truly exceeds `u64::MAX` —
+/// leading zero bytes are tolerated so a BigUInt-encoded in-range
+/// value is accepted rather than incorrectly halting the worker.
+fn big_uint_to_u64(bytes: &[u8]) -> Result<u64, ConvertError> {
+    let trimmed = bytes
+        .iter()
+        .position(|&b| b != 0)
+        .map(|i| &bytes[i..])
+        .unwrap_or(&[]);
+    if trimmed.is_empty() {
+        return Ok(0);
+    }
+    if trimmed.len() > 8 {
+        return Err(ConvertError::Overflow);
+    }
+    let mut buf = [0u8; 8];
+    buf[8 - trimmed.len()..].copy_from_slice(trimmed);
+    Ok(u64::from_be_bytes(buf))
 }
 
 fn try_map<U, L, F>(items: Vec<U>, f: F) -> Result<Vec<L>, ConvertError>
@@ -273,6 +295,61 @@ mod tests {
     }
 
     #[test]
+    fn convert_big_uint_within_u64_succeeds() {
+        // u5c is free to encode an in-range positive value as BigUInt
+        // rather than Int — we accept rather than halt when it fits.
+        // 5_000_000 == 0x4C 0x4B 0x40 in big-endian.
+        let upstream = v18::TxOutput {
+            address: vec![].into(),
+            coin: Some(v18::BigInt {
+                big_int: Some(v18::big_int::BigInt::BigUInt(
+                    vec![0x4C, 0x4B, 0x40].into(),
+                )),
+            }),
+            assets: vec![],
+            datum: None,
+            script: None,
+        };
+        let bal = convert_tx_output(upstream).expect("convert");
+        assert_eq!(bal.coin, 5_000_000);
+    }
+
+    #[test]
+    fn convert_big_uint_u64_max_succeeds() {
+        // Exactly 8 bytes of 0xFF — the u64::MAX boundary.
+        let upstream = v18::TxOutput {
+            address: vec![].into(),
+            coin: Some(v18::BigInt {
+                big_int: Some(v18::big_int::BigInt::BigUInt(vec![0xFF; 8].into())),
+            }),
+            assets: vec![],
+            datum: None,
+            script: None,
+        };
+        let bal = convert_tx_output(upstream).expect("convert");
+        assert_eq!(bal.coin, u64::MAX);
+    }
+
+    #[test]
+    fn convert_big_uint_leading_zeros_are_tolerated() {
+        // Leading zero bytes are not significant — should not push the
+        // value past the u64 boundary check.
+        let upstream = v18::TxOutput {
+            address: vec![].into(),
+            coin: Some(v18::BigInt {
+                big_int: Some(v18::big_int::BigInt::BigUInt(
+                    vec![0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05].into(),
+                )),
+            }),
+            assets: vec![],
+            datum: None,
+            script: None,
+        };
+        let bal = convert_tx_output(upstream).expect("convert");
+        assert_eq!(bal.coin, 5);
+    }
+
+    #[test]
     fn convert_overflow_negative_to_unsigned_errors() {
         let upstream = v18::TxOutput {
             address: vec![].into(),
@@ -320,6 +397,82 @@ mod tests {
         let decoded_017 = v17::TxOutput::decode(bytes.as_slice()).expect("0.17.0 decode");
         assert_eq!(decoded_017.coin, 2_500_000);
         assert_eq!(decoded_017.address.to_vec(), vec![0xAA; 28]);
+    }
+
+    #[test]
+    fn convert_then_decode_with_017_preserves_datum_payload() {
+        // The `roundtrip_opt` helper assumes Datum's wire format is
+        // identical between utxorpc-spec 0.17 and 0.18. Round-trip a
+        // populated payload through the converter and decode it under
+        // 0.17 prost so any future divergence trips at test time
+        // instead of as a silent decode error in production.
+        let upstream = v18::TxOutput {
+            address: vec![0xAA; 28].into(),
+            coin: Some(v18::BigInt {
+                big_int: Some(v18::big_int::BigInt::Int(1_000_000)),
+            }),
+            assets: vec![],
+            datum: Some(v18::Datum {
+                hash: vec![0xEE; 32].into(),
+                payload: Some(v18::PlutusData {
+                    plutus_data: Some(v18::plutus_data::PlutusData::BoundedBytes(
+                        b"datum-payload".to_vec().into(),
+                    )),
+                }),
+                original_cbor: vec![0xFF; 8].into(),
+            }),
+            script: None,
+        };
+        let bal = convert_tx_output(upstream).expect("convert");
+        let bytes = bal.encode_to_vec();
+        let decoded = v17::TxOutput::decode(bytes.as_slice()).expect("0.17.0 decode");
+        let datum = decoded.datum.as_ref().expect("datum present");
+        assert_eq!(datum.hash.to_vec(), vec![0xEE; 32]);
+        assert_eq!(datum.original_cbor.to_vec(), vec![0xFF; 8]);
+        let payload = datum.payload.as_ref().expect("datum payload present");
+        match payload.plutus_data.as_ref() {
+            Some(v17::plutus_data::PlutusData::BoundedBytes(b)) => {
+                assert_eq!(b.to_vec(), b"datum-payload".to_vec());
+            }
+            other => panic!("unexpected datum payload variant: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn convert_then_decode_with_017_preserves_witness_set() {
+        // Same `roundtrip_opt` assumption for WitnessSet — round-trip a
+        // populated witness set through `convert_tx` and decode under
+        // 0.17 prost.
+        let upstream = v18::Tx {
+            witnesses: Some(v18::WitnessSet {
+                vkeywitness: vec![v18::VKeyWitness {
+                    vkey: vec![0x11; 32].into(),
+                    signature: vec![0x22; 64].into(),
+                }],
+                script: vec![],
+                plutus_datums: vec![v18::PlutusData {
+                    plutus_data: Some(v18::plutus_data::PlutusData::BoundedBytes(
+                        b"witness-datum".to_vec().into(),
+                    )),
+                }],
+            }),
+            hash: vec![0xCC; 32].into(),
+            ..Default::default()
+        };
+        let bal = convert_tx(upstream).expect("convert");
+        let bytes = bal.encode_to_vec();
+        let decoded = v17::Tx::decode(bytes.as_slice()).expect("0.17.0 decode");
+        let witnesses = decoded.witnesses.as_ref().expect("witnesses present");
+        assert_eq!(witnesses.vkeywitness.len(), 1);
+        assert_eq!(witnesses.vkeywitness[0].vkey.to_vec(), vec![0x11; 32]);
+        assert_eq!(witnesses.vkeywitness[0].signature.to_vec(), vec![0x22; 64]);
+        assert_eq!(witnesses.plutus_datums.len(), 1);
+        match witnesses.plutus_datums[0].plutus_data.as_ref() {
+            Some(v17::plutus_data::PlutusData::BoundedBytes(b)) => {
+                assert_eq!(b.to_vec(), b"witness-datum".to_vec());
+            }
+            other => panic!("unexpected plutus datum variant: {other:?}"),
+        }
     }
 
     fn big_int(n: i64) -> v18::BigInt {

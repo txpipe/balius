@@ -48,6 +48,13 @@ fn wire_compat_tx_output_roundtrips_via_017() {
     let datum = decoded.datum.as_ref().expect("datum present");
     assert_eq!(datum.hash.to_vec(), vec![0xEE; 32]);
     assert_eq!(datum.original_cbor.to_vec(), vec![0xFF; 8]);
+    let payload = datum.payload.as_ref().expect("datum payload present");
+    match payload.plutus_data.as_ref() {
+        Some(v17::plutus_data::PlutusData::BoundedBytes(bytes)) => {
+            assert_eq!(bytes.to_vec(), b"datum-payload".to_vec());
+        }
+        other => panic!("unexpected datum payload variant: {other:?}"),
+    }
     // Dropped TxOutput tags decode as defaults:
     assert!(decoded.script.is_none());
 }
