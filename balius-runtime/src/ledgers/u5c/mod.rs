@@ -5,6 +5,8 @@ use utxorpc::CardanoQueryClient;
 
 use crate::wit::balius::app::ledger as wit;
 
+pub mod convert;
+
 impl From<utxorpc::Error> for crate::Error {
     fn from(error: utxorpc::Error) -> Self {
         crate::Error::Ledger(error.to_string())
@@ -35,13 +37,23 @@ impl From<utxorpc::spec::query::TxoRef> for wit::TxoRef {
     }
 }
 
-impl From<utxorpc::ChainUtxo<utxorpc::spec::cardano::TxOutput>> for wit::Utxo {
-    fn from(value: utxorpc::ChainUtxo<utxorpc::spec::cardano::TxOutput>) -> Self {
-        wit::Utxo {
-            body: value.native.into(),
-            ref_: value.txo_ref.unwrap_or_default().into(),
-        }
-    }
+fn chain_utxo_to_wit(
+    value: utxorpc::ChainUtxo<utxorpc::spec::cardano::TxOutput>,
+) -> Result<wit::Utxo, wit::LedgerError> {
+    use prost::Message;
+
+    let bytes = value
+        .parsed
+        .map(convert::convert_tx_output)
+        .transpose()
+        .map_err(|e| wit::LedgerError::Upstream(format!("u5c -> balius_core conversion: {e}")))?
+        .map(|t| t.encode_to_vec())
+        .unwrap_or_default();
+
+    Ok(wit::Utxo {
+        body: bytes,
+        ref_: value.txo_ref.unwrap_or_default().into(),
+    })
 }
 
 impl From<wit::AddressPattern> for utxorpc::spec::cardano::AddressPattern {
@@ -71,13 +83,17 @@ impl From<wit::UtxoPattern> for utxorpc::spec::cardano::TxOutputPattern {
     }
 }
 
-impl From<utxorpc::UtxoPage<utxorpc::Cardano>> for wit::UtxoPage {
-    fn from(value: utxorpc::UtxoPage<utxorpc::Cardano>) -> Self {
-        wit::UtxoPage {
-            utxos: value.items.into_iter().map(|u| u.into()).collect(),
-            next_token: value.next,
-        }
-    }
+fn utxo_page_to_wit(
+    value: utxorpc::UtxoPage<utxorpc::Cardano>,
+) -> Result<wit::UtxoPage, wit::LedgerError> {
+    Ok(wit::UtxoPage {
+        utxos: value
+            .items
+            .into_iter()
+            .map(chain_utxo_to_wit)
+            .collect::<Result<Vec<_>, _>>()?,
+        next_token: value.next,
+    })
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -111,7 +127,7 @@ impl Ledger {
     ) -> Result<Vec<wit::Utxo>, wit::LedgerError> {
         let refs = refs.into_iter().map(|r| r.into()).collect();
         let utxos = self.queries.read_utxos(refs).await?;
-        Ok(utxos.into_iter().map(|u| u.into()).collect())
+        utxos.into_iter().map(chain_utxo_to_wit).collect()
     }
 
     pub async fn search_utxos(
@@ -122,7 +138,7 @@ impl Ledger {
     ) -> Result<wit::UtxoPage, wit::LedgerError> {
         let pattern = pattern.into();
         let utxos = self.queries.match_utxos(pattern, start, max_items).await?;
-        Ok(utxos.into())
+        utxo_page_to_wit(utxos)
     }
 
     pub async fn read_params(&mut self) -> Result<wit::Json, wit::LedgerError> {
@@ -137,7 +153,10 @@ impl Ledger {
         ))?;
         match params {
             utxorpc::spec::query::any_chain_params::Params::Cardano(params) => {
-                Ok(serde_json::to_vec(&params).unwrap())
+                let bal = convert::convert_pparams(params).map_err(|e| {
+                    wit::LedgerError::Upstream(format!("u5c -> balius pparams conversion: {e}"))
+                })?;
+                Ok(serde_json::to_vec(&bal).unwrap())
             }
             #[allow(unreachable_patterns)]
             _ => Err(wit::LedgerError::Upstream(

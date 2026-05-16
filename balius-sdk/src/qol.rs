@@ -277,24 +277,13 @@ pub struct Utxo<D> {
     pub block_slot: u64,
     pub tx_hash: Vec<u8>,
     pub index: u64,
-    pub utxo: utxorpc_spec::utxorpc::v1alpha::cardano::TxOutput,
+    pub utxo: balius_core::proto::v0::cardano::TxOutput,
     pub datum: Option<D>,
 }
 
 impl<D> Utxo<D> {
     pub fn coin(&self) -> u64 {
-        self.utxo
-            .coin
-            .as_ref()
-            .and_then(|x| {
-                x.big_int.as_ref().and_then(|y| match y {
-                    utxorpc_spec::utxorpc::v1alpha::cardano::big_int::BigInt::Int(z) => {
-                        Some(*z as u64)
-                    }
-                    _ => None,
-                })
-            })
-            .unwrap_or_default()
+        self.utxo.coin
     }
 }
 
@@ -334,7 +323,7 @@ pub struct Tx {
     pub block_height: u64,
     pub block_slot: u64,
     pub hash: Vec<u8>,
-    pub tx: utxorpc_spec::utxorpc::v1alpha::cardano::Tx,
+    pub tx: balius_core::proto::v0::cardano::Tx,
 }
 
 impl TryFrom<wit::Event> for Tx {

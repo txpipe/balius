@@ -82,6 +82,15 @@ pub enum Error {
 
     #[error("kv error {0}")]
     KvError(String),
+
+    #[error("u5c -> balius_core conversion error: {0}")]
+    Convert(ledgers::u5c::convert::ConvertError),
+}
+
+impl From<ledgers::u5c::convert::ConvertError> for Error {
+    fn from(value: ledgers::u5c::convert::ConvertError) -> Self {
+        Self::Convert(value)
+    }
 }
 
 impl From<wasmtime::Error> for Error {
@@ -176,7 +185,7 @@ impl ChainPoint {
 pub type LogSeq = u64;
 
 pub enum TxInput {
-    Cardano(utxorpc::spec::cardano::TxInput),
+    Cardano(balius_core::proto::v0::cardano::TxInput),
 }
 
 impl TxInput {
@@ -196,7 +205,7 @@ impl TxInput {
 }
 
 pub enum Utxo {
-    Cardano(utxorpc::spec::cardano::TxOutput),
+    Cardano(balius_core::proto::v0::cardano::TxOutput),
 }
 
 impl Utxo {
@@ -216,7 +225,7 @@ impl Utxo {
 }
 
 pub enum Tx {
-    Cardano(utxorpc::spec::cardano::Tx),
+    Cardano(balius_core::proto::v0::cardano::Tx),
 }
 
 impl Tx {
@@ -273,13 +282,18 @@ impl Block {
             Self::Cardano(block) => block.header.as_ref().unwrap().slot,
         }
     }
-    pub fn txs(&self) -> Vec<Tx> {
+    pub fn txs(&self) -> Result<Vec<Tx>, Error> {
         match self {
             Self::Cardano(block) => block
                 .body
                 .iter()
                 .flat_map(|b| b.tx.iter())
-                .map(|t| Tx::Cardano(t.clone()))
+                .cloned()
+                .map(|t| {
+                    ledgers::u5c::convert::convert_tx(t)
+                        .map(Tx::Cardano)
+                        .map_err(Error::from)
+                })
                 .collect(),
         }
     }
@@ -379,7 +393,7 @@ impl LoadedWorker {
         let block_hash = block.hash();
         let block_height = block.height();
         let block_slot = block.slot();
-        for tx in block.txs() {
+        for tx in block.txs()? {
             let tx_hash = tx.hash();
             let channels = self.wasm_store.data().router.find_tx_targets(&tx);
             if !channels.is_empty() {
@@ -432,7 +446,7 @@ impl LoadedWorker {
         let block_hash = block.hash();
         let block_height = block.height();
         let block_slot = block.slot();
-        for tx in block.txs() {
+        for tx in block.txs()? {
             let tx_hash = tx.hash();
             for (index, utxo) in tx.outputs().into_iter().enumerate().rev() {
                 let channels = self.wasm_store.data().router.find_utxo_targets(&utxo);

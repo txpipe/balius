@@ -15,6 +15,7 @@ members = [
     "balius-sdk",
     "balius-runtime",
     "balius-macros",
+    "balius-core",
     "baliusd",
 ]
 

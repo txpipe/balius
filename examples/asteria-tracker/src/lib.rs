@@ -1,11 +1,11 @@
+use balius_core::proto::v0::cardano::plutus_data::{self};
+use balius_core::proto::v0::cardano::{big_int, PlutusData};
 use balius_sdk::http::{AsHeader, HttpRequest};
 use balius_sdk::wit::balius::app as worker;
 use balius_sdk::{self as sdk};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use url::Url;
-use utxorpc_spec::utxorpc::v1alpha::cardano::plutus_data::{self};
-use utxorpc_spec::utxorpc::v1alpha::cardano::{big_int, PlutusData};
 
 #[derive(Serialize, Deserialize, Clone)]
 struct Config {
@@ -64,12 +64,12 @@ fn handle_utxo(config: sdk::Config<Config>, utxo: sdk::Utxo<Datum>) -> sdk::Work
         let mut fuel: u64 = 0;
         let massets = utxo.utxo.assets;
         for masset in &massets {
-            // masset has type Multiasset (utxorpc_spec)
+            // masset has type Multiasset (balius_core)
             let masset_policy = hex::encode(masset.policy_id.into_bytes());
             if masset_policy == config.ship_policy {
                 is_valid = true;
             } else if masset_policy == config.fuel_policy {
-                // asset has type Asset (utxorpc_spec)
+                // asset has type Asset (balius_core)
                 let asset = masset.assets.first().unwrap();
                 fuel = asset.output_coin;
             }
