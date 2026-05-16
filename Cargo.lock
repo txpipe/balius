@@ -113,12 +113,12 @@ checksum = "dde20b3d026af13f561bdd0f15edf01fc734f0dafcedbaf42bba506a9517f223"
 name = "asteria-tracker"
 version = "0.0.1"
 dependencies = [
- "balius-sdk 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "balius-core",
+ "balius-sdk",
  "hex",
  "serde",
  "serde_json",
  "url",
- "utxorpc-spec 0.16.0",
 ]
 
 [[package]]
@@ -253,18 +253,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "balius-macros"
+name = "balius-core"
 version = "0.5.2"
 dependencies = [
- "quote",
- "syn",
+ "bytes",
+ "prost",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "utxorpc-spec 0.17.0",
 ]
 
 [[package]]
 name = "balius-macros"
 version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1850261cea7908eaee4aa1abf57c945a492bcf75a4f63e704e8b6d729bc42ea"
 dependencies = [
  "quote",
  "syn",
@@ -275,6 +277,7 @@ name = "balius-runtime"
 version = "0.5.2"
 dependencies = [
  "async-trait",
+ "balius-core",
  "chrono",
  "flate2",
  "futures",
@@ -296,6 +299,7 @@ dependencies = [
  "tracing",
  "url",
  "utxorpc",
+ "utxorpc-spec 0.17.0",
  "warp",
  "wasmtime",
  "wat",
@@ -306,7 +310,8 @@ dependencies = [
 name = "balius-sdk"
 version = "0.5.2"
 dependencies = [
- "balius-macros 0.5.2",
+ "balius-core",
+ "balius-macros",
  "hex",
  "pallas-addresses",
  "pallas-codec",
@@ -321,32 +326,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "url",
- "utxorpc-spec 0.18.1",
- "wit-bindgen",
-]
-
-[[package]]
-name = "balius-sdk"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0802e18ba0d94115cfcc71c4e90bac912a295381bf52cf4ac9af7b55e2a29e4"
-dependencies = [
- "balius-macros 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "hex",
- "pallas-addresses",
- "pallas-codec",
- "pallas-crypto",
- "pallas-primitives",
- "pallas-traverse",
- "prost",
- "serde",
- "serde_json",
- "serde_with",
- "thiserror 2.0.12",
- "tracing",
- "tracing-subscriber",
- "url",
- "utxorpc-spec 0.16.0",
  "wit-bindgen",
 ]
 
@@ -559,7 +538,7 @@ checksum = "5b63caa9aa9397e2d9480a9b13673856c78d8ac123288526c37d7839f2a86990"
 name = "comprehensive"
 version = "0.1.0"
 dependencies = [
- "balius-sdk 0.5.2",
+ "balius-sdk",
  "hex",
  "serde",
  "serde_with",
@@ -2032,7 +2011,7 @@ dependencies = [
 name = "minter"
 version = "0.1.0"
 dependencies = [
- "balius-sdk 0.5.2",
+ "balius-sdk",
  "hex",
  "pallas-codec",
  "pallas-primitives",
@@ -2081,7 +2060,7 @@ checksum = "1d87ecb2933e8aeadb3e3a02b828fed80a7528047e68b4f424523a0981a3a084"
 name = "my-bod"
 version = "0.1.0"
 dependencies = [
- "balius-sdk 0.5.2",
+ "balius-sdk",
  "pallas-primitives",
  "serde",
 ]
@@ -3528,7 +3507,7 @@ checksum = "e502f78cdbb8ba4718f566c418c52bc729126ffd16baee5baa718cf25dd5a69a"
 name = "telchar"
 version = "0.1.0"
 dependencies = [
- "balius-sdk 0.5.2",
+ "balius-sdk",
  "hex",
  "pallas-primitives",
  "serde",
@@ -4117,9 +4096,9 @@ dependencies = [
 
 [[package]]
 name = "utxorpc-spec"
-version = "0.16.0"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7148c5cd211c397a41245cfbd8d4cb8371d748ed5e3cf131ebcd9cacfa794206"
+checksum = "a1d984ee351b308377e118135e638a5d544fdb0855f12a3b088d9dcaf0432052"
 dependencies = [
  "bytes",
  "futures-core",
@@ -4179,7 +4158,7 @@ dependencies = [
 name = "wallet"
 version = "0.1.0"
 dependencies = [
- "balius-sdk 0.5.2",
+ "balius-sdk",
  "hex",
  "pallas-codec",
  "pallas-primitives",
