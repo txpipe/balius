@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use balius_runtime::{ledgers, Runtime, Store};
+use balius_runtime::{ledgers, store::redb::Store as RedbStore, Runtime, Store};
 use miette::{Context as _, IntoDiagnostic as _};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn, Level};
@@ -90,9 +90,11 @@ async fn run_project_with_config(
     setup_tracing()?;
 
     info!("Running Balius project on daemon...");
-    let store: Store = Store::open("baliusd.db", None)
-        .into_diagnostic()
-        .context("opening store")?;
+    let store = Store::Redb(
+        RedbStore::open("baliusd.db", None)
+            .into_diagnostic()
+            .context("opening store")?,
+    );
 
     let config = ledgers::u5c::Config {
         endpoint_url: utxo_url.clone(),
