@@ -237,3 +237,184 @@ pub mod script {
         PlutusV3(::prost::bytes::Bytes),
     }
 }
+
+// ────────────────────────────────────────────────────────────────────────
+// PParams family
+//
+// Unlike the prost messages above, `PParams` and its nested types cross
+// the WIT boundary as **JSON**, not protobuf. The shape mirrors what
+// utxorpc-spec 0.17.0's pbjson serializer would emit so pre-BigInt
+// workers' pbjson decoder reads it unchanged:
+//   - camelCase keys
+//   - u64/i64 fields serialized as JSON strings
+//   - u32/i32 fields serialized as plain numbers
+//   - None / proto3-default fields omitted entirely
+// The runtime's u5c adapter constructs values of these types and hands
+// them to `serde_json::to_value`; the SDK consumes them by deserialize.
+// ────────────────────────────────────────────────────────────────────────
+
+use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, DisplayFromStr};
+
+fn is_zero_u64(v: &u64) -> bool {
+    *v == 0
+}
+fn is_zero_u32(v: &u32) -> bool {
+    *v == 0
+}
+fn is_zero_i32(v: &i32) -> bool {
+    *v == 0
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RationalNumber {
+    #[serde(skip_serializing_if = "is_zero_i32")]
+    pub numerator: i32,
+    #[serde(skip_serializing_if = "is_zero_u32")]
+    pub denominator: u32,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ProtocolVersion {
+    #[serde(skip_serializing_if = "is_zero_u32")]
+    pub major: u32,
+    #[serde(skip_serializing_if = "is_zero_u32")]
+    pub minor: u32,
+}
+
+#[serde_as]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ExUnits {
+    #[serde_as(as = "DisplayFromStr")]
+    #[serde(skip_serializing_if = "is_zero_u64")]
+    pub steps: u64,
+    #[serde_as(as = "DisplayFromStr")]
+    #[serde(skip_serializing_if = "is_zero_u64")]
+    pub memory: u64,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ExPrices {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub steps: Option<RationalNumber>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory: Option<RationalNumber>,
+}
+
+#[serde_as]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CostModel {
+    #[serde_as(as = "Vec<DisplayFromStr>")]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub values: Vec<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct CostModels {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plutus_v1: Option<CostModel>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plutus_v2: Option<CostModel>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plutus_v3: Option<CostModel>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VotingThresholds {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub thresholds: Vec<RationalNumber>,
+}
+
+#[serde_as]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct PParams {
+    #[serde_as(as = "DisplayFromStr")]
+    #[serde(skip_serializing_if = "is_zero_u64")]
+    pub coins_per_utxo_byte: u64,
+    #[serde_as(as = "DisplayFromStr")]
+    #[serde(skip_serializing_if = "is_zero_u64")]
+    pub max_tx_size: u64,
+    #[serde_as(as = "DisplayFromStr")]
+    #[serde(skip_serializing_if = "is_zero_u64")]
+    pub min_fee_coefficient: u64,
+    #[serde_as(as = "DisplayFromStr")]
+    #[serde(skip_serializing_if = "is_zero_u64")]
+    pub min_fee_constant: u64,
+    #[serde_as(as = "DisplayFromStr")]
+    #[serde(skip_serializing_if = "is_zero_u64")]
+    pub max_block_body_size: u64,
+    #[serde_as(as = "DisplayFromStr")]
+    #[serde(skip_serializing_if = "is_zero_u64")]
+    pub max_block_header_size: u64,
+    #[serde_as(as = "DisplayFromStr")]
+    #[serde(skip_serializing_if = "is_zero_u64")]
+    pub stake_key_deposit: u64,
+    #[serde_as(as = "DisplayFromStr")]
+    #[serde(skip_serializing_if = "is_zero_u64")]
+    pub pool_deposit: u64,
+    #[serde_as(as = "DisplayFromStr")]
+    #[serde(skip_serializing_if = "is_zero_u64")]
+    pub pool_retirement_epoch_bound: u64,
+    #[serde_as(as = "DisplayFromStr")]
+    #[serde(skip_serializing_if = "is_zero_u64")]
+    pub desired_number_of_pools: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pool_influence: Option<RationalNumber>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub monetary_expansion: Option<RationalNumber>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub treasury_expansion: Option<RationalNumber>,
+    #[serde_as(as = "DisplayFromStr")]
+    #[serde(skip_serializing_if = "is_zero_u64")]
+    pub min_pool_cost: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub protocol_version: Option<ProtocolVersion>,
+    #[serde_as(as = "DisplayFromStr")]
+    #[serde(skip_serializing_if = "is_zero_u64")]
+    pub max_value_size: u64,
+    #[serde_as(as = "DisplayFromStr")]
+    #[serde(skip_serializing_if = "is_zero_u64")]
+    pub collateral_percentage: u64,
+    #[serde_as(as = "DisplayFromStr")]
+    #[serde(skip_serializing_if = "is_zero_u64")]
+    pub max_collateral_inputs: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cost_models: Option<CostModels>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prices: Option<ExPrices>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_execution_units_per_transaction: Option<ExUnits>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_execution_units_per_block: Option<ExUnits>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_fee_script_ref_cost_per_byte: Option<RationalNumber>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pool_voting_thresholds: Option<VotingThresholds>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub drep_voting_thresholds: Option<VotingThresholds>,
+    #[serde(skip_serializing_if = "is_zero_u32")]
+    pub min_committee_size: u32,
+    #[serde_as(as = "DisplayFromStr")]
+    #[serde(skip_serializing_if = "is_zero_u64")]
+    pub committee_term_limit: u64,
+    #[serde_as(as = "DisplayFromStr")]
+    #[serde(skip_serializing_if = "is_zero_u64")]
+    pub governance_action_validity_period: u64,
+    #[serde_as(as = "DisplayFromStr")]
+    #[serde(skip_serializing_if = "is_zero_u64")]
+    pub governance_action_deposit: u64,
+    #[serde_as(as = "DisplayFromStr")]
+    #[serde(skip_serializing_if = "is_zero_u64")]
+    pub drep_deposit: u64,
+    #[serde_as(as = "DisplayFromStr")]
+    #[serde(skip_serializing_if = "is_zero_u64")]
+    pub drep_inactivity_period: u64,
+}

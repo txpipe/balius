@@ -258,6 +258,9 @@ version = "0.5.2"
 dependencies = [
  "bytes",
  "prost",
+ "serde",
+ "serde_json",
+ "serde_with",
  "utxorpc-spec 0.17.0",
 ]
 

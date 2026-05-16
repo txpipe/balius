@@ -52,23 +52,13 @@ use std::sync::Arc;
 pub use pallas_codec as codec;
 pub use pallas_primitives::conway as primitives;
 
-/// Protocol parameters surface the SDK currently consumes for tx-building.
+/// Protocol parameters surface the SDK consumes for tx-building.
 ///
-/// `read-params` hands over the JSON shape that utxorpc-spec 0.17's
-/// pbjson serializer produces (camelCase keys, u64s as strings). Workers
-/// built against pre-BigInt SDKs deserialize the same payload unchanged
-/// via their own pbjson decoder — that is the ABI we are preserving.
-///
-/// Add fields here as they become needed; serde ignores anything the
-/// runtime emits that we don't read.
-#[serde_with::serde_as]
-#[derive(Clone, Debug, Default, serde::Deserialize)]
-#[serde(default)]
-pub struct PParams {
-    #[serde_as(as = "serde_with::DisplayFromStr")]
-    #[serde(rename = "coinsPerUtxoByte")]
-    pub coins_per_utxo_byte: u64,
-}
+/// The shape — wire-compatible with utxorpc-spec 0.17 pbjson, which is
+/// what pre-BigInt worker decoders expect — is defined once in
+/// `balius_core::proto::v0::cardano::PParams`. The runtime emits values
+/// of this type via `read-params`; the SDK deserializes them here.
+pub use balius_core::proto::v0::cardano::PParams;
 
 pub trait Ledger {
     fn read_utxos(&self, refs: &[dsl::TxoRef]) -> Result<dsl::UtxoSet, BuildError>;

@@ -127,187 +127,92 @@ pub fn convert_tx(t: upstream::Tx) -> Result<legacy::Tx, ConvertError> {
     })
 }
 
-// Convert upstream `PParams` to the JSON shape that pre-BigInt workers
-// expect: pbjson conventions from utxorpc-spec 0.17 — camelCase keys,
-// u64/i64 emitted as JSON strings, u32/i32 as plain numbers,
-// None/default-zero fields omitted. BigInt-typed fields (which were
-// uint64 in 0.17) are flattened with `unwrap_u64` and overflow halts.
-//
-// Built imperatively rather than via a mirror struct because PParams
-// crosses the WIT boundary as JSON, not protobuf — there is nothing for
-// prost wire-compat to anchor against.
+// PParams crosses the WIT boundary as JSON. The wire shape — pbjson
+// conventions from utxorpc-spec 0.17 — is owned by balius-core (see
+// `balius_core::proto::v0::cardano::PParams` and its nested types). All
+// this layer does is flatten upstream BigInts into plain integers and
+// copy fields across; serde handles the rest.
 
-fn rational_to_json(r: &upstream::RationalNumber) -> serde_json::Value {
-    let mut o = serde_json::Map::new();
-    if r.numerator != 0 {
-        o.insert("numerator".into(), serde_json::Value::from(r.numerator));
+fn convert_rational(r: upstream::RationalNumber) -> legacy::RationalNumber {
+    legacy::RationalNumber {
+        numerator: r.numerator,
+        denominator: r.denominator,
     }
-    if r.denominator != 0 {
-        o.insert("denominator".into(), serde_json::Value::from(r.denominator));
-    }
-    serde_json::Value::Object(o)
 }
 
-fn protocol_version_to_json(v: &upstream::ProtocolVersion) -> serde_json::Value {
-    let mut o = serde_json::Map::new();
-    if v.major != 0 {
-        o.insert("major".into(), serde_json::Value::from(v.major));
+fn convert_protocol_version(v: upstream::ProtocolVersion) -> legacy::ProtocolVersion {
+    legacy::ProtocolVersion {
+        major: v.major,
+        minor: v.minor,
     }
-    if v.minor != 0 {
-        o.insert("minor".into(), serde_json::Value::from(v.minor));
-    }
-    serde_json::Value::Object(o)
 }
 
-fn ex_units_to_json(u: &upstream::ExUnits) -> serde_json::Value {
-    let mut o = serde_json::Map::new();
-    if u.steps != 0 {
-        o.insert("steps".into(), serde_json::Value::String(u.steps.to_string()));
+fn convert_ex_units(u: upstream::ExUnits) -> legacy::ExUnits {
+    legacy::ExUnits {
+        steps: u.steps,
+        memory: u.memory,
     }
-    if u.memory != 0 {
-        o.insert("memory".into(), serde_json::Value::String(u.memory.to_string()));
-    }
-    serde_json::Value::Object(o)
 }
 
-fn ex_prices_to_json(p: &upstream::ExPrices) -> serde_json::Value {
-    let mut o = serde_json::Map::new();
-    if let Some(s) = &p.steps {
-        o.insert("steps".into(), rational_to_json(s));
+fn convert_ex_prices(p: upstream::ExPrices) -> legacy::ExPrices {
+    legacy::ExPrices {
+        steps: p.steps.map(convert_rational),
+        memory: p.memory.map(convert_rational),
     }
-    if let Some(m) = &p.memory {
-        o.insert("memory".into(), rational_to_json(m));
-    }
-    serde_json::Value::Object(o)
 }
 
-fn cost_model_to_json(c: &upstream::CostModel) -> serde_json::Value {
-    let mut o = serde_json::Map::new();
-    if !c.values.is_empty() {
-        let arr: Vec<serde_json::Value> = c
-            .values
-            .iter()
-            .map(|v| serde_json::Value::String(v.to_string()))
-            .collect();
-        o.insert("values".into(), serde_json::Value::Array(arr));
-    }
-    serde_json::Value::Object(o)
+fn convert_cost_model(c: upstream::CostModel) -> legacy::CostModel {
+    legacy::CostModel { values: c.values }
 }
 
-fn cost_models_to_json(cm: &upstream::CostModels) -> serde_json::Value {
-    let mut o = serde_json::Map::new();
-    if let Some(v) = &cm.plutus_v1 {
-        o.insert("plutusV1".into(), cost_model_to_json(v));
+fn convert_cost_models(cm: upstream::CostModels) -> legacy::CostModels {
+    legacy::CostModels {
+        plutus_v1: cm.plutus_v1.map(convert_cost_model),
+        plutus_v2: cm.plutus_v2.map(convert_cost_model),
+        plutus_v3: cm.plutus_v3.map(convert_cost_model),
     }
-    if let Some(v) = &cm.plutus_v2 {
-        o.insert("plutusV2".into(), cost_model_to_json(v));
-    }
-    if let Some(v) = &cm.plutus_v3 {
-        o.insert("plutusV3".into(), cost_model_to_json(v));
-    }
-    serde_json::Value::Object(o)
 }
 
-fn voting_thresholds_to_json(v: &upstream::VotingThresholds) -> serde_json::Value {
-    let mut o = serde_json::Map::new();
-    if !v.thresholds.is_empty() {
-        let arr: Vec<serde_json::Value> = v.thresholds.iter().map(rational_to_json).collect();
-        o.insert("thresholds".into(), serde_json::Value::Array(arr));
+fn convert_voting_thresholds(v: upstream::VotingThresholds) -> legacy::VotingThresholds {
+    legacy::VotingThresholds {
+        thresholds: v.thresholds.into_iter().map(convert_rational).collect(),
     }
-    serde_json::Value::Object(o)
 }
 
-/// Produce the JSON payload that `read-params` hands the SDK. The shape
-/// is exactly what `utxorpc-spec 0.17`'s pbjson serializer would emit
-/// for a `PParams` message — so workers compiled against pre-BigInt
-/// SDKs deserialize it unchanged.
-pub fn pparams_to_legacy_json(
-    p: &upstream::PParams,
-) -> Result<serde_json::Value, ConvertError> {
-    use serde_json::Value;
-    let mut o = serde_json::Map::new();
-
-    let put_u64_str = |o: &mut serde_json::Map<String, Value>, k: &str, v: u64| {
-        if v != 0 {
-            o.insert(k.into(), Value::String(v.to_string()));
-        }
-    };
-
-    let cput = unwrap_u64(p.coins_per_utxo_byte.as_ref())?;
-    put_u64_str(&mut o, "coinsPerUtxoByte", cput);
-    put_u64_str(&mut o, "maxTxSize", p.max_tx_size);
-    let mfc = unwrap_u64(p.min_fee_coefficient.as_ref())?;
-    put_u64_str(&mut o, "minFeeCoefficient", mfc);
-    let mfcst = unwrap_u64(p.min_fee_constant.as_ref())?;
-    put_u64_str(&mut o, "minFeeConstant", mfcst);
-    put_u64_str(&mut o, "maxBlockBodySize", p.max_block_body_size);
-    put_u64_str(&mut o, "maxBlockHeaderSize", p.max_block_header_size);
-    let skd = unwrap_u64(p.stake_key_deposit.as_ref())?;
-    put_u64_str(&mut o, "stakeKeyDeposit", skd);
-    let pd = unwrap_u64(p.pool_deposit.as_ref())?;
-    put_u64_str(&mut o, "poolDeposit", pd);
-    put_u64_str(&mut o, "poolRetirementEpochBound", p.pool_retirement_epoch_bound);
-    put_u64_str(&mut o, "desiredNumberOfPools", p.desired_number_of_pools);
-    if let Some(v) = &p.pool_influence {
-        o.insert("poolInfluence".into(), rational_to_json(v));
-    }
-    if let Some(v) = &p.monetary_expansion {
-        o.insert("monetaryExpansion".into(), rational_to_json(v));
-    }
-    if let Some(v) = &p.treasury_expansion {
-        o.insert("treasuryExpansion".into(), rational_to_json(v));
-    }
-    let mpc = unwrap_u64(p.min_pool_cost.as_ref())?;
-    put_u64_str(&mut o, "minPoolCost", mpc);
-    if let Some(v) = &p.protocol_version {
-        o.insert("protocolVersion".into(), protocol_version_to_json(v));
-    }
-    put_u64_str(&mut o, "maxValueSize", p.max_value_size);
-    put_u64_str(&mut o, "collateralPercentage", p.collateral_percentage);
-    put_u64_str(&mut o, "maxCollateralInputs", p.max_collateral_inputs);
-    if let Some(v) = &p.cost_models {
-        o.insert("costModels".into(), cost_models_to_json(v));
-    }
-    if let Some(v) = &p.prices {
-        o.insert("prices".into(), ex_prices_to_json(v));
-    }
-    if let Some(v) = &p.max_execution_units_per_transaction {
-        o.insert(
-            "maxExecutionUnitsPerTransaction".into(),
-            ex_units_to_json(v),
-        );
-    }
-    if let Some(v) = &p.max_execution_units_per_block {
-        o.insert("maxExecutionUnitsPerBlock".into(), ex_units_to_json(v));
-    }
-    if let Some(v) = &p.min_fee_script_ref_cost_per_byte {
-        o.insert("minFeeScriptRefCostPerByte".into(), rational_to_json(v));
-    }
-    if let Some(v) = &p.pool_voting_thresholds {
-        o.insert("poolVotingThresholds".into(), voting_thresholds_to_json(v));
-    }
-    if let Some(v) = &p.drep_voting_thresholds {
-        o.insert("drepVotingThresholds".into(), voting_thresholds_to_json(v));
-    }
-    if p.min_committee_size != 0 {
-        o.insert(
-            "minCommitteeSize".into(),
-            Value::from(p.min_committee_size),
-        );
-    }
-    put_u64_str(&mut o, "committeeTermLimit", p.committee_term_limit);
-    put_u64_str(
-        &mut o,
-        "governanceActionValidityPeriod",
-        p.governance_action_validity_period,
-    );
-    let gad = unwrap_u64(p.governance_action_deposit.as_ref())?;
-    put_u64_str(&mut o, "governanceActionDeposit", gad);
-    let drd = unwrap_u64(p.drep_deposit.as_ref())?;
-    put_u64_str(&mut o, "drepDeposit", drd);
-    put_u64_str(&mut o, "drepInactivityPeriod", p.drep_inactivity_period);
-
-    Ok(Value::Object(o))
+pub fn convert_pparams(p: upstream::PParams) -> Result<legacy::PParams, ConvertError> {
+    Ok(legacy::PParams {
+        coins_per_utxo_byte: unwrap_u64(p.coins_per_utxo_byte.as_ref())?,
+        max_tx_size: p.max_tx_size,
+        min_fee_coefficient: unwrap_u64(p.min_fee_coefficient.as_ref())?,
+        min_fee_constant: unwrap_u64(p.min_fee_constant.as_ref())?,
+        max_block_body_size: p.max_block_body_size,
+        max_block_header_size: p.max_block_header_size,
+        stake_key_deposit: unwrap_u64(p.stake_key_deposit.as_ref())?,
+        pool_deposit: unwrap_u64(p.pool_deposit.as_ref())?,
+        pool_retirement_epoch_bound: p.pool_retirement_epoch_bound,
+        desired_number_of_pools: p.desired_number_of_pools,
+        pool_influence: p.pool_influence.map(convert_rational),
+        monetary_expansion: p.monetary_expansion.map(convert_rational),
+        treasury_expansion: p.treasury_expansion.map(convert_rational),
+        min_pool_cost: unwrap_u64(p.min_pool_cost.as_ref())?,
+        protocol_version: p.protocol_version.map(convert_protocol_version),
+        max_value_size: p.max_value_size,
+        collateral_percentage: p.collateral_percentage,
+        max_collateral_inputs: p.max_collateral_inputs,
+        cost_models: p.cost_models.map(convert_cost_models),
+        prices: p.prices.map(convert_ex_prices),
+        max_execution_units_per_transaction: p.max_execution_units_per_transaction.map(convert_ex_units),
+        max_execution_units_per_block: p.max_execution_units_per_block.map(convert_ex_units),
+        min_fee_script_ref_cost_per_byte: p.min_fee_script_ref_cost_per_byte.map(convert_rational),
+        pool_voting_thresholds: p.pool_voting_thresholds.map(convert_voting_thresholds),
+        drep_voting_thresholds: p.drep_voting_thresholds.map(convert_voting_thresholds),
+        min_committee_size: p.min_committee_size,
+        committee_term_limit: p.committee_term_limit,
+        governance_action_validity_period: p.governance_action_validity_period,
+        governance_action_deposit: unwrap_u64(p.governance_action_deposit.as_ref())?,
+        drep_deposit: unwrap_u64(p.drep_deposit.as_ref())?,
+        drep_inactivity_period: p.drep_inactivity_period,
+    })
 }
 
 #[cfg(test)]
@@ -425,10 +330,11 @@ mod tests {
 
     #[test]
     fn convert_pparams_decodes_under_017_pbjson() {
-        // Load-bearing for PParams ABI compat: the JSON produced by
-        // `pparams_to_legacy_json` must deserialize cleanly under
-        // utxorpc-spec 0.17's pbjson decoder, which is what pre-BigInt
-        // worker SDKs ship with.
+        // End-to-end: u5c upstream with BigInt fields → convert_pparams →
+        // serde_json → utxorpc-spec 0.17 pbjson decode. The shape-only
+        // half is also asserted from balius-core
+        // (`wire_compat_pparams_roundtrips_via_017`); this test
+        // additionally proves BigInt flattening at the conversion seam.
         let upstream = v18::PParams {
             coins_per_utxo_byte: Some(big_int(4310)),
             max_tx_size: 16384,
@@ -488,8 +394,8 @@ mod tests {
             ..Default::default()
         };
 
-        let json = pparams_to_legacy_json(&upstream).expect("convert");
-        let bytes = serde_json::to_vec(&json).unwrap();
+        let bal = convert_pparams(upstream).expect("convert");
+        let bytes = serde_json::to_vec(&bal).unwrap();
         let decoded: v17::PParams = serde_json::from_slice(&bytes).expect("0.17 pbjson decode");
 
         assert_eq!(decoded.coins_per_utxo_byte, 4310);
@@ -526,22 +432,7 @@ mod tests {
             }),
             ..Default::default()
         };
-        let res = pparams_to_legacy_json(&upstream);
+        let res = convert_pparams(upstream);
         assert!(matches!(res, Err(ConvertError::Overflow)));
-    }
-
-    #[test]
-    fn convert_pparams_omits_default_fields() {
-        // Mirrors pbjson's omit-default behavior — fields left at their
-        // proto3 default must not appear in the JSON output, otherwise
-        // old workers might trip on unexpected zero-encoded entries.
-        let upstream = v18::PParams {
-            coins_per_utxo_byte: Some(big_int(4310)),
-            ..Default::default()
-        };
-        let json = pparams_to_legacy_json(&upstream).expect("convert");
-        let obj = json.as_object().expect("object");
-        assert_eq!(obj.len(), 1);
-        assert!(obj.contains_key("coinsPerUtxoByte"));
     }
 }

@@ -153,10 +153,10 @@ impl Ledger {
         ))?;
         match params {
             utxorpc::spec::query::any_chain_params::Params::Cardano(params) => {
-                let json = convert::pparams_to_legacy_json(&params).map_err(|e| {
+                let bal = convert::convert_pparams(params).map_err(|e| {
                     wit::LedgerError::Upstream(format!("u5c -> balius pparams conversion: {e}"))
                 })?;
-                Ok(serde_json::to_vec(&json).unwrap())
+                Ok(serde_json::to_vec(&bal).unwrap())
             }
             #[allow(unreachable_patterns)]
             _ => Err(wit::LedgerError::Upstream(
