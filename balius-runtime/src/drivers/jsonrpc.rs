@@ -107,13 +107,17 @@ pub async fn serve(
         .parse()
         .map_err(|x: std::net::AddrParseError| Error::Config(x.to_string()))?;
 
-    let server = warp::serve(filter)
-        .bind(address)
+    let listener = tokio::net::TcpListener::bind(address)
         .await
+        .map_err(Error::IoError)?;
+    let addr = listener.local_addr().map_err(Error::IoError)?;
+
+    let server = warp::serve(filter)
+        .incoming(listener)
         .graceful(cancel.cancelled_owned())
         .run();
 
-    tracing::info!(%address, "Json-RPC server listening");
+    tracing::info!(%addr, "Json-RPC server listening");
 
     server.await;
 
