@@ -1,2 +1,2 @@
 [advisories]
-informational_warnings = [] # silence "unmaintained" warnings
+informational_warnings = ["unsound", "notice"] # silence "unmaintained" warnings
