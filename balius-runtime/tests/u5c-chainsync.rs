@@ -49,9 +49,22 @@ async fn wallet_balance() {
         cancel.clone(),
     ));
 
-    // Wait for the first block to be applied and committed.
-    tokio::time::timeout(Duration::from_secs(120), async {
-        while runtime.chain_cursor().await.unwrap().is_none() {
+    // Wait until the cursor has advanced and a balance entry exists. The worker
+    // only writes a balance when it handles a utxo event, so a block can be
+    // committed while the table is still empty.
+    let balances = tokio::time::timeout(Duration::from_secs(120), async {
+        loop {
+            if runtime.chain_cursor().await.unwrap().is_some() {
+                let keys = kv
+                    .write()
+                    .await
+                    .list_values("wallet", "balances/".to_string())
+                    .await
+                    .unwrap();
+                if !keys.is_empty() {
+                    break keys;
+                }
+            }
             if driver.is_finished() {
                 panic!("chain-sync driver exited before applying a block");
             }
@@ -59,17 +72,7 @@ async fn wallet_balance() {
         }
     })
     .await
-    .expect("timed out waiting for a block to be applied");
-
-    // The worker matches every utxo, so any mainnet block should produce at
-    // least one balance entry.
-    let balances = kv
-        .write()
-        .await
-        .list_values("wallet", "balances/".to_string())
-        .await
-        .unwrap();
-    assert!(!balances.is_empty());
+    .expect("timed out waiting for a balance entry");
 
     let value = kv
         .write()
