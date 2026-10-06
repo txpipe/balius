@@ -107,10 +107,13 @@ pub async fn serve(
         .parse()
         .map_err(|x: std::net::AddrParseError| Error::Config(x.to_string()))?;
 
-    let (addr, server) =
-        warp::serve(filter).bind_with_graceful_shutdown(address, cancel.cancelled_owned());
+    let server = warp::serve(filter)
+        .bind(address)
+        .await
+        .graceful(cancel.cancelled_owned())
+        .run();
 
-    tracing::info!(%addr, "Json-RPC server listening");
+    tracing::info!(%address, "Json-RPC server listening");
 
     server.await;
 

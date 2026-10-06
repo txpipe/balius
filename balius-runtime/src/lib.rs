@@ -3,6 +3,7 @@ use itertools::Itertools;
 use kv::KvHost;
 use ledgers::LedgerHost;
 use logging::LoggerHost;
+use object_store::ObjectStoreExt as _;
 use router::Router;
 use sign::SignerHost;
 use std::{collections::HashMap, io::Read, path::Path, sync::Arc, time::Instant};
