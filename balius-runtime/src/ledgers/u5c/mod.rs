@@ -40,18 +40,10 @@ impl From<utxorpc::spec::query::TxoRef> for wit::TxoRef {
 fn chain_utxo_to_wit(
     value: utxorpc::ChainUtxo<utxorpc::spec::cardano::TxOutput>,
 ) -> Result<wit::Utxo, wit::LedgerError> {
-    use prost::Message;
-
-    let bytes = value
-        .parsed
-        .map(convert::convert_tx_output)
-        .transpose()
-        .map_err(|e| wit::LedgerError::Upstream(format!("u5c -> balius_core conversion: {e}")))?
-        .map(|t| t.encode_to_vec())
-        .unwrap_or_default();
-
+    // The WIT `utxo.body` is the output's native CBOR, which is what the
+    // SDK's txbuilder decodes; don't re-encode it as balius_core protobuf.
     Ok(wit::Utxo {
-        body: bytes,
+        body: value.native.into(),
         ref_: value.txo_ref.unwrap_or_default().into(),
     })
 }

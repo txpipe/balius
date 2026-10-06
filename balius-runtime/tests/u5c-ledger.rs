@@ -8,10 +8,10 @@ use std::collections::HashMap;
 async fn faucet_claim() {
     let store = Store::Redb(RedbStore::open("tests/balius.db", None).unwrap());
     let ledger = ledgers::u5c::Ledger::new(&ledgers::u5c::Config {
-        endpoint_url: "https://mainnet.utxorpc-v0.demeter.run".to_string(),
+        endpoint_url: "https://cardano-mainnet.utxorpc-m1.demeter.run".to_string(),
         headers: Some(HashMap::from([(
-            "api-key".to_string(),
-            "dmtr_utxorpc1wgnnj0qcfj32zxsz2uc8d4g7uclm2s2w".to_string(),
+            "dmtr-api-key".to_string(),
+            "utxorpc1af7qyjwrhw8pgpkwe32".to_string(),
         )])),
     })
     .await
@@ -46,7 +46,7 @@ async fn faucet_claim() {
       "fuel": {
         "Refs": [
           {
-            "hash": "1d85738732cf49481b22e440191c747e643841d59c94e935d3ad2c016729a066",
+            "hash": "2c80db2dc0e3a3b957d6e96c5d3b2ca024fccd9eed5319b0c65127896216baaf",
             "index": 0
           }
         ]

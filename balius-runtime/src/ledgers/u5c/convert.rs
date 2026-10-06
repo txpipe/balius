@@ -2,8 +2,9 @@
 //!
 //! Lives in the u5c adapter, not in balius-core: the schema crate must
 //! not be coupled to any upstream service. Used at chainsync ingress
-//! (`lib.rs::Block::txs`) and at ledger reads (`super::chain_utxo_to_wit`
-//! / `super::Ledger::read_params`).
+//! (`lib.rs::Block::txs`) and at ledger param reads
+//! (`super::Ledger::read_params`). Ledger UTxO reads pass the upstream
+//! native CBOR through untouched.
 //!
 //! Two flavors of output:
 //!  - Tx/UTxO/etc. travel as **prost bytes** — `convert_*` functions
