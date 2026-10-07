@@ -123,7 +123,7 @@ async fn run_project_with_config(
         .register_worker_from_file(project_name, &wasm_path, config)
         .await
         .into_diagnostic()
-        .context(format!("registering worker {}", &wasm_path))?;
+        .context(format!("registering worker {wasm_path}"))?;
 
     let cancel = hook_exit_token();
 

@@ -3,6 +3,7 @@ use itertools::Itertools;
 use kv::KvHost;
 use ledgers::LedgerHost;
 use logging::LoggerHost;
+use object_store::ObjectStoreExt as _;
 use router::Router;
 use sign::SignerHost;
 use std::{collections::HashMap, io::Read, path::Path, sync::Arc, time::Instant};
@@ -697,6 +698,10 @@ impl Runtime {
         }
 
         store_update.commit().await?;
+
+        for worker in workers.values() {
+            worker.lock().await.cursor = Some(log_seq);
+        }
 
         self.metrics
             .handle_chain_duration_ms(start.elapsed().as_secs_f64() * 1000.0);
