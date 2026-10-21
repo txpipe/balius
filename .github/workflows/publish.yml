@@ -30,6 +30,8 @@ jobs:
         run: cargo login ${{ secrets.CRATES_IO_TOKEN }}
 
       - name: "cargo release publish"
+        # --isolated ignores release.toml, whose `publish = false` (kept so
+        # local `cargo release <version>` only tags) makes this a silent no-op.
         run: |-
           cargo release \
             publish \
@@ -38,4 +40,5 @@ jobs:
             --allow-branch HEAD \
             --no-confirm \
             --no-verify \
+            --isolated \
             --execute
