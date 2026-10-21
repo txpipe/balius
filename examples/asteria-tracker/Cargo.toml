@@ -2,6 +2,7 @@
 name = "asteria-tracker"
 version = "0.0.1"
 edition = "2021"
+publish = false
 
 [dependencies]
 balius-sdk = { version = "0.5.3", path = "../../balius-sdk" }
