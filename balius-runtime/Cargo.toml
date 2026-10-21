@@ -1,6 +1,6 @@
 [package]
 name = "balius-runtime"
-version = "0.5.3"
+version = "0.5.4"
 edition = "2021"
 
 description = "Runtime for run Headless dApps on UTxO-based blockchains"
@@ -25,7 +25,7 @@ itertools = "0.14.0"
 async-trait = "0.1.83"
 utxorpc = { version = "0.13.0" }
 # utxorpc = { path = "../../../utxorpc/rust-sdk" }
-balius-core = { version = "0.5.3", path = "../balius-core" }
+balius-core = { version = "0.5.4", path = "../balius-core" }
 tokio-util = "0.7.12"
 prost = "0.13"
 object_store = { version = "0.14.2", features = ["fs"] }

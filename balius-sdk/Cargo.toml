@@ -1,6 +1,6 @@
 [package]
 name = "balius-sdk"
-version = "0.5.3"
+version = "0.5.4"
 edition = "2021"
 
 description = "SDK for building Headless dApps on UTxO-based blockchains"
@@ -9,8 +9,8 @@ repository = "https://github.com/txpipe/balius"
 readme = "README.md"
 
 [dependencies]
-balius-core = { version = "0.5.3", path = "../balius-core" }
-balius-macros = { version = "0.5.3", path = "../balius-macros" }
+balius-core = { version = "0.5.4", path = "../balius-core" }
+balius-macros = { version = "0.5.4", path = "../balius-macros" }
 hex = "0.4.3"
 pallas-addresses = { version = "1.0.0" }
 pallas-codec = { version = "1.0.0" }
