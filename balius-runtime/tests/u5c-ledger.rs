@@ -5,6 +5,7 @@ use serde_json::json;
 use std::collections::HashMap;
 
 #[tokio::test]
+#[ignore = "on-demand network test: needs live mainnet UTxO RPC; run with `cargo test -- --ignored`"]
 async fn faucet_claim() {
     let store = Store::Redb(RedbStore::open("tests/balius.db", None).unwrap());
     let ledger = ledgers::u5c::Ledger::new(&ledgers::u5c::Config {
