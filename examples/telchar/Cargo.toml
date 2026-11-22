@@ -9,7 +9,7 @@ publish = false
 [dependencies]
 balius-sdk = { path = "../../balius-sdk" }
 hex = "0.4.3"
-pallas-primitives = "1.0.0"
+pallas-primitives = "=1.5.0-rc.3"
 serde = { version = "1.0.204", features = ["derive"] }
 
 [lib]
